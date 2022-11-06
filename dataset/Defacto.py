@@ -69,8 +69,8 @@ class DefactoDataset(torch.utils.data.Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        image = torch.FloatTensor(cv.imread(f"C:/Users/zxcas/PythonWork/DATASETS/Forgery/copymove_img/img/{self.name[idx][:-3]}tif"))
-        label = torch.FloatTensor(cv.imread(f"C:/Users/zxcas/PythonWork/DATASETS/Forgery/copymove_annotations/probe_mask/{self.name[idx][:-3]}jpg",cv.IMREAD_GRAYSCALE))
+        image = torch.FloatTensor(cv.imread(f"{self.im_root_dir}/{self.name[idx][:-3]}tif"))
+        label = torch.FloatTensor(cv.imread(f"{self.label_root_dir}/{self.name[idx][:-3]}tif",cv.IMREAD_GRAYSCALE))
         if len(label.shape)>=3:
             label = torch.max(label , 2) 
             
@@ -99,15 +99,15 @@ class DefactoDataset(torch.utils.data.Dataset):
         
         return {'image': x, 'landmarks': y}
 
-def load_dataset(total_nums,batch_size):
+def load_dataset(total_nums,batch_size,dir_img,dir_mask):
     transformi = transforms.Compose([
                 # torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
                 #              std=[0.229, 0.224, 0.225])
     ])
     transform = None
 
-    dataset = DefactoDataset(r'C:\Users\zxcas\PythonWork\DATASETS\Forgery\copymove_img\img',
-                r"C:\Users\zxcas\PythonWork\DATASETS\Forgery\copymove_annotations\probe_mask",
+    dataset = DefactoDataset(dir_img,
+                dir_mask,
                 total_nums,
                 'train',transformi,transform)
     dataset_size = len(dataset)
@@ -123,15 +123,15 @@ def load_dataset(total_nums,batch_size):
     
     return train_dataloader,val_dataloader
 
-def test(model,device,index,mode):
+def test(model,device,index,mode,dir_img,dir_mask):
     model.eval()
     transformi = transforms.Compose([
                 torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
                 ])
     transform = None
-    testdata = DefactoDataset(r'C:\Users\zxcas\PythonWork\DATASETS\Forgery\copymove_img\img',
-               r"C:\Users\zxcas\PythonWork\DATASETS\Forgery\copymove_annotations\probe_mask",
+    testdata = DefactoDataset(dir_img,
+               dir_mask,
                2000,
                mode,transformi,transform)
     

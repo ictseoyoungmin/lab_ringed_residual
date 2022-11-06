@@ -30,7 +30,10 @@ def train_net(net,
     # ids = split_ids(get_ids(dir_img))
     # iddataset = split_train_val(ids, val_percent)
 
-    train_dataloader, val_dataloader = load_dataset(1000,batch_size)
+    train_dataloader, val_dataloader = load_dataset(1000,batch_size,
+                                                    dir_img =  r'E:\splicing_1_img\img',
+                                                    dir_mask =  r"E:\splicing_1_annotations\donor_mask"
+    )
 
 
     print('''
@@ -60,7 +63,7 @@ def train_net(net,
     Valida_dice = []
     EPOCH = []
     spend_total_time = []
-
+    max_loss = 0.0
     for epoch in range(epochs):
         net.train()
 
@@ -127,9 +130,8 @@ def train_net(net,
         Train_loss.append(epoch_loss / i)
         Valida_dice.append(val_dice)
         EPOCH.append(epoch)
-
+            
         fig = plt.figure()
-
         plt.title('Training Process')
         plt.xlabel('epoch')
         plt.ylabel('value')
@@ -139,7 +141,8 @@ def train_net(net,
         plt.legend(handles=[l1, l2], labels=['Tra_loss', 'Val_dice'], loc='best')
         plt.savefig(dir_logs + 'Training Process for lr-{}.png'.format(lr), dpi=600)
         plt.close()
-        torch.save(net.state_dict(),
+        if epoch > 40:
+            torch.save(net.state_dict(),
                    dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}.pkl'.format(dataset, val_dice, epoch_loss / i))
         spend_per_time = time.time() - start_epoch
         print('Spend time: {:.3f}s'.format(spend_per_time))
@@ -153,13 +156,9 @@ def main():
     checkpoint = True
     ft = False
     dataset = "defactor"#'CASIA'
-    # model: 'Unet', 'Res_Unet', 'Ringed_Res_Unet'
     model = 'Ringed_Res_Unet'
 
-    dir_img =  r'C:\Users\zxcas\PythonWork\DATASETS\Forgery\copymove_img\img'
-#    dir_img = './data/data_{}/train/tam/'.format(dataset)
-    dir_mask =  r"C:\Users\zxcas\PythonWork\DATASETS\Forgery\copymove_annotations\donor_mask"
-#    dir_mask = './data/data_{}/train/mask/'.format(dataset)
+    
 
     dir_logs = './result/logs/{}/{}/'.format(dataset, model)
     os.makedirs(dir_logs,exist_ok=True)
@@ -167,7 +166,7 @@ def main():
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
 
     if checkpoint:
-        net.load_state_dict(torch.load('./result/logs/{}/{}/defactor-[val_dice]-0.4414-[train_loss]-0.3801.pkl'.format(dataset, model)))
+        net.load_state_dict(torch.load('./result/logs/{}/{}/defactor-[val_dice]-0.2679-[train_loss]-2.4120.pkl'.format(dataset, model)))
         print('Load checkpoint')
     if ft:
         fine_tuning_model = './result/logs/{}/{}/test.pkl'.format(dataset, model)
