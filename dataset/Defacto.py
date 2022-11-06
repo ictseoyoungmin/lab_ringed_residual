@@ -9,22 +9,19 @@ import pandas as pd
 import torchvision.transforms.functional as TF
 from torchvision.transforms import transforms
 from torch.utils.data import DataLoader,random_split
-import torchvision
 import cv2 as cv
-import matplotlib.pyplot as plt
 
 # https://www.kaggle.com/code/alerium/defacto-test
 class DefactoDataset(torch.utils.data.Dataset):
-    def __init__(self, im_root_dir,label_root_dir, num, mode='test' , transform=None,tra = None):
+    def __init__(self, im_root_dir,label_root_dir, num, img_size, mode='test' , transform=None):
         self.im_root_dir = im_root_dir
         self.label_root_dir = label_root_dir
         self.transform = transform
-        self.tra = tra
         self.num = num
         self.mode = mode
-        name = []
-        lab = []
-        name , label = self.prepare(self.im_root_dir , self.label_root_dir, self.num,self.mode)
+        self.img_size = img_size
+
+        name , label = self.prepare(self.im_root_dir , self.label_root_dir, self.num)
 
         self.name = name
         self.label = label
@@ -32,8 +29,8 @@ class DefactoDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.name)
 
-    ###3 for defacto
-    def prepare(self,im_root_dir , lab_root_dir , num=2000,mode='test'):
+    ### for defacto : num 개수 만큼 데이터세트 잘라서 사용
+    def prepare(self,im_root_dir , lab_root_dir , num=2000):
         name = []
         lab = []
         
@@ -49,107 +46,83 @@ class DefactoDataset(torch.utils.data.Dataset):
         
         return name , label 
 
-    def transform0(self , sample, mode = 'train'):
-        if mode in ['train','test']:
-            image, mask = sample[0], sample[1]
-            n = 256
+    def _resize(self , sample):
+        image, mask = sample[0], sample[1]
+        n = self.img_size
+        image = TF.resize(image , size=(n,n),interpolation=transforms.InterpolationMode.BICUBIC)
+        mask = TF.resize(mask , size=(n,n) ,interpolation=transforms.InterpolationMode.BICUBIC)
 
-            image = TF.resize(image , size=(n,n),interpolation=torchvision.transforms.InterpolationMode.BICUBIC)
-            mask = TF.resize(mask , size=(n,n) ,interpolation=torchvision.transforms.InterpolationMode.BICUBIC)
-        else :
-            image, mask = sample[0], sample[1]
-            n = 256
-            image = image.permute(2,0,1)
-            image = TF.resize(image , size=(n,n),interpolation=torchvision.transforms.InterpolationMode.BICUBIC)
-            mask = TF.resize(mask , size=(n,n) ,interpolation=torchvision.transforms.InterpolationMode.BICUBIC)
-            image = image.permute(1,2,0)
         return image , mask
     
     def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-
         image = torch.FloatTensor(cv.imread(f"{self.im_root_dir}/{self.name[idx][:-3]}tif"))
-        label = torch.FloatTensor(cv.imread(f"{self.label_root_dir}/{self.name[idx][:-3]}tif",cv.IMREAD_GRAYSCALE))
-        if len(label.shape)>=3:
-            label = torch.max(label , 2) 
-            
-        if self.mode =='train':
-            # z = self.tra(image = np.array(image),mask = (np.array(label)))
-            # x = torch.FloatTensor(z['image'])
-            # y = torch.FloatTensor(z['mask'])
-            x,y  = image, label
-            x = x.permute(2,0,1)
+        label = torch.FloatTensor(cv.imread(f"{self.label_root_dir}/{self.name[idx][:-3]}jpg",cv.IMREAD_GRAYSCALE))
+
+        if self.transform == None:
+            self.transform = transforms.Compose([
+                transforms.Resize((self.img_size,self.img_size),interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5,0.5,0.5],std=[0.5,0.5,0.5])
+            ])
+
+        if self.mode in ['train','eval']:
+            x,y  = self._resize((image.permute(2,0,1), label.unsqueeze(0))) # (C,W,H)로 마춰줘야 함
             x = self.transform(x)
-            y = y.unsqueeze(0)
-            x,y = self.transform0((x/255.0,y))
             y = y.ge(0.5).float()
-        elif self.mode == 'test':
+        else: # test : 네트워크에 통과되지 않고 바로 plot 가능한 image 반환
             x = image.permute(2,0,1)
-            x = self.transform(x)
             y = label.unsqueeze(0)/255.0
-            x,y = self.transform0((x/255.0,y))
-            y = y.ge(0.5).float()
-        else:
-            x = image
-            y = label.unsqueeze(0)/255.0
-            x,y = self.transform0((x/255.0,y),'none')
-            y = y.ge(0.5).float()
+            x,y = self._resize((x/255.0,y))
+            y = y.ge(0.5).float() # element-wise로 값을 비교해 크거나 같으면 True를, 작으면 False를 반환한다.
             y = y.permute(1,2,0)
-        
         return {'image': x, 'landmarks': y}
 
-def load_dataset(total_nums,batch_size,dir_img,dir_mask):
+def load_dataset(total_nums,img_size,batch_size,dir_img,dir_mask):
+    # ImageNet 표준으로 정규화 <- 일반적인 관행
     transformi = transforms.Compose([
-                # torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                #              std=[0.229, 0.224, 0.225])
+                transforms.Resize((img_size,img_size)),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                              std=[0.229, 0.224, 0.225])
     ])
-    transform = None
 
     dataset = DefactoDataset(dir_img,
                 dir_mask,
                 total_nums,
-                'train',transformi,transform)
+                img_size,
+                'train',transformi)
     dataset_size = len(dataset)
     train_size = int(dataset_size * 0.8)
-    validation_size = int(dataset_size * 0.1)
-    test_size = dataset_size - train_size - validation_size
+    validation_size = int(dataset_size * 0.2)
 
-    train_dataset, validation_dataset, test_dataset = random_split(dataset, [train_size, validation_size, test_size])
-    print(train_dataset.__len__())
+    train_dataset, validation_dataset = random_split(dataset, [train_size, validation_size])
+    print("train images len : ",train_dataset.__len__())
+    print("validation images len : ",validation_dataset.__len__())
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, shuffle=True)
     val_dataloader = DataLoader(validation_dataset, batch_size=batch_size, num_workers=0, shuffle=True)
     
     return train_dataloader,val_dataloader
 
-def test(model,device,index,mode,dir_img,dir_mask):
+def test(model,device,index,mode,img_size,dir_img,dir_mask):
     model.eval()
     transformi = transforms.Compose([
-                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
                 ])
-    transform = None
     testdata = DefactoDataset(dir_img,
                dir_mask,
                2000,
-               mode,transformi,transform)
-    
-    absolute_path = False
-    if absolute_path :
-        image = torch.cuda.FloatTensor([cv.imread('./test_example.jpg')]) #0_000000103897.tif
-        # image = torch.cuda.FloatTensor([cv.imread('./0_000000103897.tif')]) 
-
-        x = image.permute(0,3,1,2)
-        x = testdata.transform(x)
-        x = TF.resize(x/255. , size=(256,256),interpolation=torchvision.transforms.InterpolationMode.BICUBIC)
+               img_size,
+               mode,transformi)
+    print(testdata.__len__())
 
     img = testdata.__getitem__(index)['image']
     mask = testdata.__getitem__(index)['landmarks']
 
+
     inp = torch.Tensor([img.numpy()]).to(device)
     print(inp.shape)
     with torch.no_grad():
-        pred = model(inp.permute(0,3,1,2))#.permute(0,3,1,2))
+        pred = model(transformi(inp)) # normalize none
+
     return pred, img, mask
-# pred,ad = test(model_man,device)

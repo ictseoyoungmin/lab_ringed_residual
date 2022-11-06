@@ -19,44 +19,41 @@ from loss.dice_loss import dice_coeff
 def train_net(net,
               epochs=5,
               batch_size=1,
+              img_size=512,
               lr=1e-2,
-              val_percent=0.05,
               save_cp=True,
               gpu=True,
-              img_scale=1,
               dataset=None,
               dir_logs=None):
     # training images are square
     # ids = split_ids(get_ids(dir_img))
     # iddataset = split_train_val(ids, val_percent)
 
-    train_dataloader, val_dataloader = load_dataset(1000,batch_size,
+    # splicing_1_img 개수는 12187
+    train_dataloader, val_dataloader = load_dataset(12184,
+                                                    img_size,
+                                                    batch_size,
                                                     dir_img =  r'E:\splicing_1_img\img',
-                                                    dir_mask =  r"E:\splicing_1_annotations\donor_mask"
+                                                    dir_mask =  r"E:\splicing_1_annotations\probe_mask"
     )
 
 
-    print('''
+    print(f'''
     Starting training:
-        Epochs: {}
-        Batch size: {}
-        Learning rate: {}
-        Training size: {}
-        Validation size: {}
-        Checkpoints: {}
-        CUDA: {}
-    '''.format(epochs,
-               batch_size,
-               lr,
-               train_dataloader.__len__(),
-               val_dataloader.__len__(),
-               str(save_cp),
-               str(gpu)))
+        Epochs: {epochs}
+        Batch size: {batch_size}
+        Image size: {img_size}
+        Learning rate: {lr}
+        Training size: {train_dataloader.__len__()}
+        Validation size: {val_dataloader.__len__()}
+        Checkpoints: {str(save_cp)}
+        CUDA: {str(gpu)}
+    ''')
     # return 0
     N_train = train_dataloader.__len__()
+
     optimizer = optim.Adam(net.parameters(),
-                           lr=lr,
-                           weight_decay=0)
+                           lr=lr)
     criterion = nn.BCELoss()
 
     Train_loss  = []
@@ -64,16 +61,13 @@ def train_net(net,
     EPOCH = []
     spend_total_time = []
     max_loss = 0.0
+
     for epoch in range(epochs):
         net.train()
 
         start_epoch = time.time()
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
-        # reset the generators
-        # train = get_imgs_and_masks(iddataset['train'], dir_img, dir_mask, img_scale, dataset)
-        # val = get_imgs_and_masks(iddataset['val'], dir_img, dir_mask, img_scale, dataset)
-
-        epoch_loss = 0
+        epoch_loss = 0.0
 
         for i, data in enumerate(train_dataloader):
             start_batch = time.time()
@@ -148,30 +142,31 @@ def train_net(net,
         print('Spend time: {:.3f}s'.format(spend_per_time))
         spend_total_time.append(spend_per_time)
         print()
-    print('Total time : {}'.format(sum(spend_total_time)))
+
+    Tt = int(sum(spend_total_time))    
+    print('Total time : {}m {}s'.format(Tt//60,Tt%60))
 
 def main():
-    epochs, batchsize, scale, gpu = 50, 6, 1, True
+    # config parameters
+    epochs = 1
+    batchsize = 2
+    image_size = 512 #  x(512,512,3) y(512,512,1)
+    gpu = True
     lr = 1e-3
-    checkpoint = True
-    ft = False
-    dataset = "defactor"#'CASIA'
+    checkpoint = False
+    dataset = "defactor" #'CASIA'
     model = 'Ringed_Res_Unet'
-
-    
-
     dir_logs = './result/logs/{}/{}/'.format(dataset, model)
+
+    # log directory 생성
     os.makedirs(dir_logs,exist_ok=True)
 
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
 
+    # 훈련 epoch 나눠서 진행 할 때 True 사용
     if checkpoint:
         net.load_state_dict(torch.load('./result/logs/{}/{}/defactor-[val_dice]-0.2679-[train_loss]-2.4120.pkl'.format(dataset, model)))
         print('Load checkpoint')
-    if ft:
-        fine_tuning_model = './result/logs/{}/{}/test.pkl'.format(dataset, model)
-        net.load_state_dict(torch.load(fine_tuning_model))
-        print('Model loaded from {}'.format(fine_tuning_model))
 
     if gpu:
         net.cuda()
@@ -180,9 +175,9 @@ def main():
     train_net(net=net,
               epochs=epochs,
               batch_size=batchsize,
+              img_size=image_size,
               lr=lr,
               gpu=gpu,
-              img_scale=scale,
               dataset=dataset,
               dir_logs=dir_logs)
 
