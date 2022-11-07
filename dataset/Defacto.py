@@ -41,6 +41,7 @@ class DefactoDataset(torch.utils.data.Dataset):
         for fname in zipta:
             lab_ = [a for a in labels if fname in a]
             lab.append(lab_)
+            
         name = sorted(zipta)
         label = sorted(lab)
         
@@ -75,6 +76,7 @@ class DefactoDataset(torch.utils.data.Dataset):
             x,y = self._resize((x/255.0,y))
             y = y.ge(0.5).float() # element-wise로 값을 비교해 크거나 같으면 True를, 작으면 False를 반환한다.
             y = y.permute(1,2,0)
+
         return {'image': x, 'landmarks': y}
 
 def load_dataset(total_nums,img_size,batch_size,dir_img,dir_mask):
@@ -90,6 +92,7 @@ def load_dataset(total_nums,img_size,batch_size,dir_img,dir_mask):
                 total_nums,
                 img_size,
                 'train',transformi)
+
     dataset_size = len(dataset)
     train_size = int(dataset_size * 0.8)
     validation_size = int(dataset_size * 0.2)

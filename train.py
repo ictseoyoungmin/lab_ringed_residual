@@ -37,7 +37,6 @@ def train_net(net,
                                                     dir_mask =  r"E:\splicing_1_annotations\probe_mask"
     )
 
-
     print(f'''
     Starting training:
         Epochs: {epochs}
@@ -60,7 +59,6 @@ def train_net(net,
     Valida_dice = []
     EPOCH = []
     spend_total_time = []
-    max_loss = 0.0
 
     for epoch in range(epochs):
         net.train()
@@ -73,11 +71,6 @@ def train_net(net,
             start_batch = time.time()
             imgs = data['image']
             true_masks = data['landmarks']
-            # imgs = np.array([i[0] for i in b]).astype(np.float32)
-            # true_masks = np.array([i[1] for i in b]).astype(np.float32) / 255.
-
-            # imgs = torch.from_numpy(imgs)
-            # true_masks = torch.from_numpy(true_masks)
 
             if gpu:
                 imgs = imgs.cuda()
@@ -135,6 +128,7 @@ def train_net(net,
         plt.legend(handles=[l1, l2], labels=['Tra_loss', 'Val_dice'], loc='best')
         plt.savefig(dir_logs + 'Training Process for lr-{}.png'.format(lr), dpi=600)
         plt.close()
+
         if epoch > 40:
             torch.save(net.state_dict(),
                    dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}.pkl'.format(dataset, val_dice, epoch_loss / i))
@@ -148,7 +142,7 @@ def train_net(net,
 
 def main():
     # config parameters
-    epochs = 1
+    epochs = 2
     batchsize = 2
     image_size = 512 #  x(512,512,3) y(512,512,1)
     gpu = True
