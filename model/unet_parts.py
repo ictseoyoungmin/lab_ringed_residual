@@ -132,3 +132,11 @@ class outconv(nn.Module):
     def forward(self, x):
         x = self.conv(x)
         return x
+
+class Classisifer(nn.Module):
+    def __init__(self,in_ch,out_ch):
+        super(Classisifer,self).__init__()
+        self.classifer = nn.Linear(in_ch,out_ch)
+        self.relu = nn.ReLU(inplace=True)
+    def forward(self,x):
+        return self.classifer(self.relu(x))

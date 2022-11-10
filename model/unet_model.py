@@ -19,6 +19,7 @@ class Ringed_Res_Unet(nn.Module):
         self.up3 = RRU_up(128, 32)
         self.up4 = RRU_up(64, 32)
         self.out = outconv(32, n_classes)
+        # self.classifier = Classisifer(512*512,2) # 이미지 사이즈 512, outconv ch 1 기준
 
     def forward(self, x):
         x1 = self.down(x)
@@ -30,8 +31,10 @@ class Ringed_Res_Unet(nn.Module):
         x = self.up2(x, x3)
         x = self.up3(x, x2)
         x = self.up4(x, x1)
-        x = self.out(x)
-        return x
+        x_seg = self.out(x) # (1,H,W)
+        # x = x_seg.view(-1)
+        # x_class = self.classifier(x) # [1,0] : 정상, [0,1] : 위조 
+        return x_seg
 
 # model = Ringed_Res_Unet(3,1)
 # print('# generator parameters:', 1.0 * sum(param.numel() for param in model.parameters())/1000000)

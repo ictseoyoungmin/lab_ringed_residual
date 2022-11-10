@@ -27,7 +27,6 @@ class AbstractDataset(ABC):
         if grid_crop and crop_size is not None:
             assert crop_size[0] % 8 == 0 and crop_size[1] % 8 == 0
         self._blocks = blocks
-        self.tamp_list = None
         self.DCT_channels = DCT_channels
 
     def _get_jpeg_info(self, im_path):
@@ -194,21 +193,5 @@ class AbstractDataset(ABC):
         else:
             return tensor, torch.tensor(mask, dtype=torch.long), torch.tensor(qtables[:self.DCT_channels], dtype=torch.float)
 
-    @abstractmethod
-    def get_tamp(self, index):
-        pass
 
-    def get_tamp_name(self, index):
-        item = self.tamp_list[index]
-        if isinstance(item, list):
-            return item[0]
-        else:
-            return item
-
-    def get_PIL_Image(self, index):
-        file = self.tamp_list[index][0]
-        im = Image.fromarray(cv2.cvtColor(cv2.imread(str(self._root_path / file)), cv2.COLOR_BGR2RGB))
-        return im
-
-    def __len__(self):
-        return len(self.tamp_list)
+    # def __len__(self):

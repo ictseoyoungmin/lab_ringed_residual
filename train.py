@@ -21,10 +21,11 @@ def train_net(net,
               batch_size=1,
               img_size=512,
               lr=1e-2,
-              save_cp=True,
+              checkpoint=True,
               gpu=True,
               dataset=None,
-              dir_logs=None):
+              dir_logs=None
+              ):
     # training images are square
     # ids = split_ids(get_ids(dir_img))
     # iddataset = split_train_val(ids, val_percent)
@@ -45,7 +46,7 @@ def train_net(net,
         Learning rate: {lr}
         Training size: {train_dataloader.__len__()}
         Validation size: {val_dataloader.__len__()}
-        Checkpoints: {str(save_cp)}
+        Checkpoints: {str(checkpoint)}
         CUDA: {str(gpu)}
     ''')
     # return 0
@@ -71,10 +72,12 @@ def train_net(net,
             start_batch = time.time()
             imgs = data['image']
             true_masks = data['landmarks']
+            true_label = data['label']
 
             if gpu:
                 imgs = imgs.cuda()
                 true_masks = true_masks.cuda()
+                true_label.cuda()
 
             optimizer.zero_grad()
 
@@ -82,6 +85,7 @@ def train_net(net,
             masks_probs = torch.sigmoid(masks_pred)
             masks_probs_flat = masks_probs.view(-1)
             true_masks_flat = true_masks.view(-1)
+
             loss = criterion(masks_probs_flat, true_masks_flat)
 
             print('{:.4f} --- loss: {:.4f}, {:.3f}s'.format(i * batch_size / N_train, loss, time.time()-start_batch))
@@ -108,7 +112,6 @@ def train_net(net,
                
                 mask_pred = net(img)[0]
                 mask_pred = (torch.sigmoid(mask_pred) > 0.5).float()
-
                 tot += dice_coeff(mask_pred, true_mask).item()
 
             val_dice = tot / i
@@ -142,7 +145,7 @@ def train_net(net,
 
 def main():
     # config parameters
-    epochs = 2
+    epochs = 1
     batchsize = 2
     image_size = 512 #  x(512,512,3) y(512,512,1)
     gpu = True
@@ -156,7 +159,6 @@ def main():
     os.makedirs(dir_logs,exist_ok=True)
 
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
-
     # 훈련 epoch 나눠서 진행 할 때 True 사용
     if checkpoint:
         net.load_state_dict(torch.load('./result/logs/{}/{}/defactor-[val_dice]-0.2679-[train_loss]-2.4120.pkl'.format(dataset, model)))
@@ -173,7 +175,8 @@ def main():
               lr=lr,
               gpu=gpu,
               dataset=dataset,
-              dir_logs=dir_logs)
+              dir_logs=dir_logs,
+              checkpoint=checkpoint)
 
 if __name__ == '__main__':
     main()

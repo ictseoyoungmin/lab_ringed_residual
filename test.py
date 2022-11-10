@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+외부 코드 클래스, 함수, 한 줄 단위로 결과 값 테스트
+get_jpeg_info : cv
+"""
+
 import jpegio
 import PIL.Image as Image
 import numpy as np
@@ -74,8 +80,12 @@ def get_jpeg_info( im_path:str):
 
         return DCT_coef, qtables
 
+def cv_convert_test(im_path):
+    img = np.array(Image.open(p).convert('YCbCr'))
+
+    
 if __name__ == "__main__":
 
     dct,qtables = get_jpeg_info(r"C:\Users\zxcas\PythonWork\DATASETS\Forgery\copymove_img\img\0_000000000071.tif")
-    print(dct)
-    print(qtables)
+    print(np.shape(dct))
+    print(np.shape(qtables))
