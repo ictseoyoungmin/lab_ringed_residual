@@ -43,3 +43,7 @@ class Ringed_Res_Unet(nn.Module):
 #     (name, param) = params[i]
 # print(name)
 # print(param.shape)
+
+if __name__ == '__main__':
+    print('as')
+    

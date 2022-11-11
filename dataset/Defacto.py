@@ -2,12 +2,17 @@
 """
 defacto-splicing Dataset utills 
 데이터세트 정의 클래스, 데이터세트 불러오기 함수 구현
+_crop_size = (256,256)
+_grid_crop = True
+_blocks = ('RGB', 'DCTvol', 'qtable')
+tamp_list = None
+DCT_channels = 1
 """
 import os,sys
-sys.path.append(os.getcwd())
+from .abstractDataset import AbstractDataset
 import torch
 import pandas as pd
-from abstractDataset import AbstractDataset
+import numpy as np
 import torchvision.transforms.functional as TF
 from torchvision.transforms import transforms
 from torch.utils.data import DataLoader,random_split
@@ -16,7 +21,10 @@ import cv2 as cv
 
 # https://www.kaggle.com/code/alerium/defacto-test
 class DefactoDataset(AbstractDataset):
-    def __init__(self, im_root_dir,label_root_dir, num, img_size, mode='test' , transform=None):
+    def __init__(self, im_root_dir,label_root_dir, num, img_size, mode='test' , transform=None, 
+                crop_size=(512,512), grid_crop=True, blocks=('RGB', 'DCTvol', 'qtable'), DCT_channels=1 ):
+        
+        super().__init__(crop_size, grid_crop, blocks, DCT_channels)
         self.im_root_dir = im_root_dir
         self.label_root_dir = label_root_dir
         self.transform = transform
@@ -48,41 +56,45 @@ class DefactoDataset(AbstractDataset):
         return image , mask
     
     def __getitem__(self,idx):
-        return 0
-        return self._create_tensor(tamp_path, mask)
+        mask = np.array(Image.open(self.df['mask_path'].iloc[idx]).convert("L"))
+        mask[mask > 0] = 1
+        x,y,z = self._create_tensor(self.df['image_path'].iloc[idx], mask)
+        image = x[:3]
+
+        return {'image': image,'artifact':x, 'landmarks': y,'qtable': z}
 
     
-    # def __getitem__(self, idx):
-    #     image = torch.FloatTensor(cv.imread(f"{self.im_root_dir}/{self.name[idx][:-3]}tif"))
-    #     label = torch.FloatTensor(cv.imread(f"{self.label_root_dir}/{self.name[idx][:-3]}jpg",cv.IMREAD_GRAYSCALE))
+    def _getitem_test(self, idx):
+        image = torch.FloatTensor(cv.imread(self.name[idx]))
+        label = torch.FloatTensor(cv.imread(self.label[idx],cv.IMREAD_GRAYSCALE))
 
-    #     if self.transform == None:
-    #         self.transform = transforms.Compose([
-    #             transforms.Resize((self.img_size,self.img_size),interpolation=transforms.InterpolationMode.BICUBIC),
-    #             transforms.ToTensor(),
-    #             transforms.Normalize(mean=[0.5,0.5,0.5],std=[0.5,0.5,0.5])
-    #         ])
+        if self.transform == None:
+            self.transform = transforms.Compose([
+                transforms.Resize((self.img_size,self.img_size),interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5,0.5,0.5],std=[0.5,0.5,0.5])
+            ])
 
-    #     if self.mode in ['train','eval']:
-    #         x,y  = self._resize((image.permute(2,0,1), label.unsqueeze(0))) # (C,W,H)로 마춰줘야 함
-    #         x = self.transform(x)
-    #         y = y.ge(0.5).float()
-    #     else: # test : 네트워크에 통과되지 않고 바로 plot 가능한 image 반환
-    #         x = image.permute(2,0,1)
-    #         y = label.unsqueeze(0)/255.0
-    #         x,y = self._resize((x/255.0,y))
-    #         y = y.ge(0.5).float() # element-wise로 값을 비교해 크거나 같으면 True를, 작으면 False를 반환한다.
-    #         y = y.permute(1,2,0)
+        if self.mode in ['train','eval']:
+            x,y  = self._resize((image.permute(2,0,1), label.unsqueeze(0))) # (C,W,H)로 마춰줘야 함
+            x = self.transform(x)
+            y = y.ge(0.5).float()
+        else: # test : 네트워크에 통과되지 않고 바로 plot 가능한 image 반환
+            x = image.permute(2,0,1)
+            y = label.unsqueeze(0)/255.0
+            x,y = self._resize((x/255.0,y))
+            y = y.ge(0.5).float() # element-wise로 값을 비교해 크거나 같으면 True를, 작으면 False를 반환한다.
+            y = y.permute(1,2,0)
 
-    #     # 위조면 [0,1] 아니면 [1,0]
-    #     # todo abstract dataset 상속으로 위조,정상 데이터 세트 정의 구별
-    #     # label = torch.zeros((2,)).float()
-    #     if True :# label == 'forgery'
-    #         label = torch.tensor(1,dtype=torch.long)
-    #     else:
-    #         label[0] = 1.0
+        # 위조면 [0,1] 아니면 [1,0]
+        # todo abstract dataset 상속으로 위조,정상 데이터 세트 정의 구별
+        # label = torch.zeros((2,)).float()
+        if True :# label == 'forgery'
+            label = torch.tensor(1,dtype=torch.long)
+        else:
+            label[0] = 1.0
 
-    #     return {'image': x, 'landmarks': y,'label':label}
+        return {'image': x, 'landmarks': y,'label':label}
 
 def load_dataset(total_nums,img_size,batch_size,dir_img,dir_mask):
     # ImageNet 표준으로 정규화 <- 일반적인 관행
@@ -98,9 +110,9 @@ def load_dataset(total_nums,img_size,batch_size,dir_img,dir_mask):
                 img_size,
                 'train',transformi)
 
-    dataset_size = len(dataset)
-    train_size = int(dataset_size * 0.8)
-    validation_size = int(dataset_size * 0.2)
+    # dataset_size = len(dataset)
+    train_size =  10000 #int(dataset_size * 0.8)
+    validation_size = 764 #int(dataset_size * 0.2)
 
     train_dataset, validation_dataset = random_split(dataset, [train_size, validation_size])
     print("train images len : ",train_dataset.__len__())
@@ -124,8 +136,8 @@ def test(model,device,index,mode,img_size,dir_img,dir_mask):
                mode,transformi)
     print(testdata.__len__())
 
-    img = testdata.__getitem__(index)['image']
-    mask = testdata.__getitem__(index)['landmarks']
+    img = testdata._getitem_test(index)['image']
+    mask = testdata._getitem_test(index)['landmarks']
 
 
     inp = torch.Tensor([img.numpy()]).to(device)
@@ -173,4 +185,4 @@ if __name__ == '__main__':
                 print("doesn't match pare")
                 break
     #match_test()
-    print(testdata.df.head())
+    print(testdata.df.describe())

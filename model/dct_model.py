@@ -9,7 +9,7 @@ _crop_size = (256,256)
 _grid_crop = True
 _blocks = ['RGB', 'DCTcoef', 'DCTvol', 'qtable']
 tamp_list = None
-DCT_channels = 3
+DCT_channels = 1
 """
 
 import torch

@@ -24,18 +24,20 @@ def train_net(net,
               checkpoint=True,
               gpu=True,
               dataset=None,
-              dir_logs=None
+              dir_logs=None,
+              dir_image=r'E:\splicing_1_img\img_jpg',
+              dir_mask =  r"E:\splicing_1_annotations\probe_mask"
               ):
     # training images are square
     # ids = split_ids(get_ids(dir_img))
     # iddataset = split_train_val(ids, val_percent)
 
-    # splicing_1_img 개수는 12187
-    train_dataloader, val_dataloader = load_dataset(12184,
+    # splicing_1_img 개수는 10765
+    train_dataloader, val_dataloader = load_dataset(10764,
                                                     img_size,
                                                     batch_size,
-                                                    dir_img =  r'E:\splicing_1_img\img',
-                                                    dir_mask =  r"E:\splicing_1_annotations\probe_mask"
+                                                    dir_img =  dir_image,
+                                                    dir_mask = dir_mask
     )
 
     print(f'''
@@ -49,13 +51,11 @@ def train_net(net,
         Checkpoints: {str(checkpoint)}
         CUDA: {str(gpu)}
     ''')
-    # return 0
     N_train = train_dataloader.__len__()
 
     optimizer = optim.Adam(net.parameters(),
                            lr=lr)
     criterion = nn.BCELoss()
-
     Train_loss  = []
     Valida_dice = []
     EPOCH = []
@@ -66,18 +66,25 @@ def train_net(net,
 
         start_epoch = time.time()
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
-        epoch_loss = 0.0
+        # reset the generators
+        # train = get_imgs_and_masks(iddataset['train'], dir_img, dir_mask, img_scale, dataset)
+        # val = get_imgs_and_masks(iddataset['val'], dir_img, dir_mask, img_scale, dataset)
+
+        epoch_loss = 0
 
         for i, data in enumerate(train_dataloader):
             start_batch = time.time()
             imgs = data['image']
             true_masks = data['landmarks']
-            true_label = data['label']
+            # imgs = np.array([i[0] for i in b]).astype(np.float32)
+            # true_masks = np.array([i[1] for i in b]).astype(np.float32) / 255.
+
+            # imgs = torch.from_numpy(imgs)
+            # true_masks = torch.from_numpy(true_masks)
 
             if gpu:
                 imgs = imgs.cuda()
                 true_masks = true_masks.cuda()
-                true_label.cuda()
 
             optimizer.zero_grad()
 
@@ -85,7 +92,6 @@ def train_net(net,
             masks_probs = torch.sigmoid(masks_pred)
             masks_probs_flat = masks_probs.view(-1)
             true_masks_flat = true_masks.view(-1)
-
             loss = criterion(masks_probs_flat, true_masks_flat)
 
             print('{:.4f} --- loss: {:.4f}, {:.3f}s'.format(i * batch_size / N_train, loss, time.time()-start_batch))
@@ -145,7 +151,7 @@ def train_net(net,
 
 def main():
     # config parameters
-    epochs = 1
+    epochs = 100
     batchsize = 2
     image_size = 512 #  x(512,512,3) y(512,512,1)
     gpu = True
@@ -154,6 +160,8 @@ def main():
     dataset = "defactor" #'CASIA'
     model = 'Ringed_Res_Unet'
     dir_logs = './result/logs/{}/{}/'.format(dataset, model)
+    dir_image=r'E:\splicing_1_img\img_jpg'
+    dir_mask =  r"E:\splicing_1_annotations\probe_mask"
 
     # log directory 생성
     os.makedirs(dir_logs,exist_ok=True)
@@ -166,7 +174,7 @@ def main():
 
     if gpu:
         net.cuda()
-        cudnn.benchmark = True  # faster convolutions, but more memory
+        # cudnn.benchmark = True  # faster convolutions, but more memory
 
     train_net(net=net,
               epochs=epochs,
@@ -176,7 +184,9 @@ def main():
               gpu=gpu,
               dataset=dataset,
               dir_logs=dir_logs,
-              checkpoint=checkpoint)
+              checkpoint=checkpoint,
+              dir_image=dir_image,
+              dir_mask=dir_mask)
 
 if __name__ == '__main__':
     main()

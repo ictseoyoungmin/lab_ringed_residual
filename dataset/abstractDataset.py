@@ -1,4 +1,9 @@
-from abc import ABC, abstractmethod
+# from https://github.com/mjkwon2021/CAT-Net
+# -*- coding: utf-8 -*-
+
+import os,sys
+sys.path.append(os.getcwd())
+from abc import ABC
 from PIL import Image, JpegImagePlugin
 import numpy as np
 import math
@@ -95,7 +100,7 @@ class AbstractDataset(ABC):
         return DCT_coef, qtables
 
     def _create_tensor(self, im_path, mask):
-        ignore_index = -1
+        ignore_index = 0
 
         img_RGB = np.array(Image.open(im_path).convert("RGB"))
 
@@ -189,9 +194,12 @@ class AbstractDataset(ABC):
         tensor = torch.cat(img_block)
 
         if 'qtable' not in self._blocks:
-            return tensor, torch.tensor(mask, dtype=torch.long), 0
+            return tensor, torch.tensor(mask, dtype=torch.float32), 0
         else:
-            return tensor, torch.tensor(mask, dtype=torch.long), torch.tensor(qtables[:self.DCT_channels], dtype=torch.float)
+            return tensor, torch.tensor(mask, dtype=torch.float32), torch.tensor(qtables[:self.DCT_channels], dtype=torch.float)
 
 
     # def __len__(self):
+
+if __name__ == '__main__':
+    pass
