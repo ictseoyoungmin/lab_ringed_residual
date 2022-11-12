@@ -26,7 +26,7 @@ def train_net(net,
               dataset=None,
               dir_logs=None,
               dir_image=r'E:\splicing_1_img\img_jpg',
-              dir_mask =  r"E:\splicing_1_annotations\probe_mask"
+              dir_mask = r"E:\splicing_1_annotations\probe_mask"
               ):
     # training images are square
     # ids = split_ids(get_ids(dir_img))
@@ -51,7 +51,7 @@ def train_net(net,
         Checkpoints: {str(checkpoint)}
         CUDA: {str(gpu)}
     ''')
-    N_train = train_dataloader.__len__()
+    N_train = train_dataloader.__len__() * batch_size
 
     optimizer = optim.Adam(net.parameters(),
                            lr=lr)
@@ -72,7 +72,7 @@ def train_net(net,
 
         epoch_loss = 0
 
-        for i, data in enumerate(train_dataloader):
+        for i, data in enumerate(train_dataloader,1):
             start_batch = time.time()
             imgs = data['image']
             true_masks = data['landmarks']
@@ -106,7 +106,7 @@ def train_net(net,
         # validate the performance of the model
         with torch.no_grad():
             net.eval()
-            tot = 0
+            tot = 0.0
 
             for i,val in enumerate(val_dataloader):
                 img = val['image']
@@ -115,7 +115,8 @@ def train_net(net,
                 if gpu:
                     img = img.cuda()
                     true_mask = true_mask.cuda()
-               
+                    # tot.cuda()
+
                 mask_pred = net(img)[0]
                 mask_pred = (torch.sigmoid(mask_pred) > 0.5).float()
                 tot += dice_coeff(mask_pred, true_mask).item()
@@ -138,9 +139,9 @@ def train_net(net,
         plt.savefig(dir_logs + 'Training Process for lr-{}.png'.format(lr), dpi=600)
         plt.close()
 
-        if epoch > 40:
+        if epoch < 140:
             torch.save(net.state_dict(),
-                   dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}.pkl'.format(dataset, val_dice, epoch_loss / i))
+                   dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(dataset, val_dice, epoch_loss / i,i))
         spend_per_time = time.time() - start_epoch
         print('Spend time: {:.3f}s'.format(spend_per_time))
         spend_total_time.append(spend_per_time)
@@ -151,12 +152,12 @@ def train_net(net,
 
 def main():
     # config parameters
-    epochs = 100
+    epochs = 3
     batchsize = 2
     image_size = 512 #  x(512,512,3) y(512,512,1)
     gpu = True
     lr = 1e-3
-    checkpoint = False
+    checkpoint = True
     dataset = "defactor" #'CASIA'
     model = 'Ringed_Res_Unet'
     dir_logs = './result/logs/{}/{}/'.format(dataset, model)
@@ -169,7 +170,7 @@ def main():
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
     # 훈련 epoch 나눠서 진행 할 때 True 사용
     if checkpoint:
-        net.load_state_dict(torch.load('./result/logs/{}/{}/defactor-[val_dice]-0.2679-[train_loss]-2.4120.pkl'.format(dataset, model)))
+        net.load_state_dict(torch.load('./result/logs/{}/{}/defactor-[val_dice]-0.6409-[train_loss]-0.2597.pkl'.format(dataset, model)))
         print('Load checkpoint')
 
     if gpu:

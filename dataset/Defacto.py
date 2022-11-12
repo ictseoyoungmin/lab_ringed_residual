@@ -22,7 +22,9 @@ import cv2 as cv
 # https://www.kaggle.com/code/alerium/defacto-test
 class DefactoDataset(AbstractDataset):
     def __init__(self, im_root_dir,label_root_dir, num, img_size, mode='test' , transform=None, 
-                crop_size=(512,512), grid_crop=True, blocks=('RGB', 'DCTvol', 'qtable'), DCT_channels=1 ):
+                # crop_size=(512,512), grid_crop=True, blocks=('RGB', 'DCTvol', 'qtable'), DCT_channels=1 \
+                    crop_size=(512,512), grid_crop=True, blocks=('RGB',), DCT_channels=1 \
+                    ):
         
         super().__init__(crop_size, grid_crop, blocks, DCT_channels)
         self.im_root_dir = im_root_dir
