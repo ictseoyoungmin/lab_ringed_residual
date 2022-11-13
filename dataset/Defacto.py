@@ -133,7 +133,7 @@ def test(model,device,index,mode,img_size,dir_img,dir_mask):
                 ])
     testdata = DefactoDataset(dir_img,
                dir_mask,
-               2000,
+               12000,
                img_size,
                mode,transformi)
     print(testdata.__len__())
@@ -151,17 +151,28 @@ def test(model,device,index,mode,img_size,dir_img,dir_mask):
 
 # tif to jpg in tif dir
 if __name__ == '__main__':
-    tif_dir = r"E:\splicing_1_img\img"
-    out_dir = r"E:\splicing_1_img\img_jpg"
+    tif_dir = r"E:\splicing_2_img\img"
+    out_dir = r"E:\splicing_2_img\img_jpg"
 
     os.makedirs(out_dir,exist_ok=True)
 
-    # for infile in os.listdir(tif_dir):
-    #     if infile[-3:] == "tif":
-    #         outfile = infile[:-3] + "jpg"
-    #         im = Image.open(os.path.join(tif_dir,infile))
-    #         out = im.convert("RGB")
-    #         out.save(os.path.join(out_dir,outfile), "JPEG", quality=100)
+    source = os.listdir(tif_dir)
+    l = len(source)
+    print('total iamges : ',l)
+
+    # for i,infile in enumerate(source,1):
+    #     try:
+    #         if infile[-3:] == "tif":
+    #             outfile = infile[:-3] + "jpg"
+    #             im = Image.open(os.path.join(tif_dir,infile))
+    #             out = im.convert("RGB")
+    #             out.save(os.path.join(out_dir,outfile), "JPEG", quality=100)
+    #         if l % i ==100: 
+    #             print(f"{i} images processed. {i/l:.3}  done. ")
+    #     except:
+    #         print(i)
+       
+
     print(len(os.listdir(tif_dir)))
     print(len(os.listdir(out_dir)))
     """
@@ -169,13 +180,13 @@ if __name__ == '__main__':
     10765
     """
 
-    mask_dir = r"E:\splicing_1_annotations\probe_mask"
+    # mask_dir = r"E:\splicing_1_annotations\probe_mask"
 
-    testdata = DefactoDataset(out_dir,
-            mask_dir,
-            2000,
-            (512,512),
-            "train",None)
+    # testdata = DefactoDataset(out_dir,
+    #         mask_dir,
+    #         2000,
+    #         (512,512),
+    #         "train",None)
 
     def match_test():
         name = testdata.name
@@ -187,4 +198,4 @@ if __name__ == '__main__':
                 print("doesn't match pare")
                 break
     #match_test()
-    print(testdata.df.describe())
+    #print(testdata.df.describe())

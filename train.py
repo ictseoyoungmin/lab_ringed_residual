@@ -94,12 +94,11 @@ def train_net(net,
             true_masks_flat = true_masks.view(-1)
             loss = criterion(masks_probs_flat, true_masks_flat)
 
-            print('{:.4f} --- loss: {:.4f}, {:.3f}s'.format(i * batch_size / N_train, loss, time.time()-start_batch))
-
             epoch_loss += loss.item()
-
             loss.backward()
             optimizer.step()
+
+            print('{:.4f} --- loss: {:.4f}, {:.3f}s'.format(i * batch_size / N_train, loss, time.time()-start_batch))
 
         print('Epoch finished ! Loss: {:.4f}'.format(epoch_loss / i))
 
@@ -141,7 +140,7 @@ def train_net(net,
 
         if epoch < 140:
             torch.save(net.state_dict(),
-                   dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(dataset, val_dice, epoch_loss / i,i))
+                   dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(dataset, val_dice, epoch_loss / i,epoch))
         spend_per_time = time.time() - start_epoch
         print('Spend time: {:.3f}s'.format(spend_per_time))
         spend_total_time.append(spend_per_time)
@@ -161,16 +160,17 @@ def main():
     dataset = "defactor" #'CASIA'
     model = 'Ringed_Res_Unet'
     dir_logs = './result/logs/{}/{}/'.format(dataset, model)
-    dir_image=r'E:\splicing_1_img\img_jpg'
-    dir_mask =  r"E:\splicing_1_annotations\probe_mask"
+    dir_image=r'E:\splicing_2_img\img_jpg'
+    dir_mask =  r"E:\splicing_2_annotations\probe_mask"
 
     # log directory 생성
     os.makedirs(dir_logs,exist_ok=True)
 
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
     # 훈련 epoch 나눠서 진행 할 때 True 사용
-    if checkpoint:
-        net.load_state_dict(torch.load('./result/logs/{}/{}/defactor-[val_dice]-0.6409-[train_loss]-0.2597.pkl'.format(dataset, model)))
+    if checkpoint: # epoch 3-img_1 3-img_2 3-img_2 3-img_2
+        net.load_state_dict(torch.load('./result/logs/{}/{}/\
+defactor-[val_dice]-0.6071-[train_loss]-0.4965-ep2.pkl'.format(dataset, model)))
         print('Load checkpoint')
 
     if gpu:
