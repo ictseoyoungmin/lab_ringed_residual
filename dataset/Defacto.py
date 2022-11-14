@@ -23,7 +23,7 @@ import cv2 as cv
 class DefactoDataset(AbstractDataset):
     def __init__(self, im_root_dir,label_root_dir, num, img_size, mode='test' , transform=None, 
                 # crop_size=(512,512), grid_crop=True, blocks=('RGB', 'DCTvol', 'qtable'), DCT_channels=1 \
-                    crop_size=(512,512), grid_crop=True, blocks=('RGB',), DCT_channels=1 \
+                    crop_size=(512,512), grid_crop=True, blocks=('RGB','DCTvol', 'qtable'), DCT_channels=1 \
                     ):
         
         super().__init__(crop_size, grid_crop, blocks, DCT_channels)
@@ -151,8 +151,8 @@ def test(model,device,index,mode,img_size,dir_img,dir_mask):
 
 # tif to jpg in tif dir
 if __name__ == '__main__':
-    tif_dir = r"E:\splicing_2_img\img"
-    out_dir = r"E:\splicing_2_img\img_jpg"
+    tif_dir = r"E:\splicing_3_img\img"
+    out_dir = r"E:\splicing_3_img\img_jpg"
 
     os.makedirs(out_dir,exist_ok=True)
 
@@ -160,17 +160,17 @@ if __name__ == '__main__':
     l = len(source)
     print('total iamges : ',l)
 
-    # for i,infile in enumerate(source,1):
-    #     try:
-    #         if infile[-3:] == "tif":
-    #             outfile = infile[:-3] + "jpg"
-    #             im = Image.open(os.path.join(tif_dir,infile))
-    #             out = im.convert("RGB")
-    #             out.save(os.path.join(out_dir,outfile), "JPEG", quality=100)
-    #         if l % i ==100: 
-    #             print(f"{i} images processed. {i/l:.3}  done. ")
-    #     except:
-    #         print(i)
+    for i,infile in enumerate(source,1):
+        try:
+            if infile[-3:] == "tif":
+                outfile = infile[:-3] + "jpg"
+                im = Image.open(os.path.join(tif_dir,infile))
+                out = im.convert("RGB")
+                out.save(os.path.join(out_dir,outfile), "JPEG", quality=100)
+            if  i %100 ==0: 
+                print(f"{i} images processed. {i/l:.3}  done. ")
+        except:
+            print(i)
        
 
     print(len(os.listdir(tif_dir)))
@@ -188,14 +188,14 @@ if __name__ == '__main__':
     #         (512,512),
     #         "train",None)
 
-    def match_test():
-        name = testdata.name
-        label = testdata.label
-        for data in zip(name,label):
-            n,l = data
-            print(n in l)    
-            if not (n in l):
-                print("doesn't match pare")
-                break
+    # def match_test():
+    #     name = testdata.name
+    #     label = testdata.label
+    #     for data in zip(name,label):
+    #         n,l = data
+    #         print(n in l)    
+    #         if not (n in l):
+    #             print("doesn't match pare")
+    #             break
     #match_test()
     #print(testdata.df.describe())

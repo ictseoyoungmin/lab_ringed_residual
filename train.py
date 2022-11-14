@@ -107,16 +107,16 @@ def train_net(net,
             net.eval()
             tot = 0.0
 
-            for i,val in enumerate(val_dataloader):
-                img = val['image']
+            for i,val in enumerate(val_dataloader): #느려지면 imgs -> img
+                imgs = val['image']
                 true_mask = val['landmarks']
                
                 if gpu:
-                    img = img.cuda()
+                    imgs = imgs.cuda()
                     true_mask = true_mask.cuda()
                     # tot.cuda()
 
-                mask_pred = net(img)[0]
+                mask_pred = net(imgs)[0]
                 mask_pred = (torch.sigmoid(mask_pred) > 0.5).float()
                 tot += dice_coeff(mask_pred, true_mask).item()
 
@@ -140,7 +140,7 @@ def train_net(net,
 
         if epoch < 140:
             torch.save(net.state_dict(),
-                   dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(dataset, val_dice, epoch_loss / i,epoch))
+                   dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(dataset, val_dice, epoch_loss / i,epoch+15))
         spend_per_time = time.time() - start_epoch
         print('Spend time: {:.3f}s'.format(spend_per_time))
         spend_total_time.append(spend_per_time)
@@ -168,9 +168,9 @@ def main():
 
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
     # 훈련 epoch 나눠서 진행 할 때 True 사용
-    if checkpoint: # epoch 3-img_1 3-img_2 3-img_2 3-img_2
+    if checkpoint: # epoch 3-img_1 3-img_2 *4
         net.load_state_dict(torch.load('./result/logs/{}/{}/\
-defactor-[val_dice]-0.6071-[train_loss]-0.4965-ep2.pkl'.format(dataset, model)))
+defactor-[val_dice]-0.7546-[train_loss]-0.3125-ep15.pkl'.format(dataset, model)))
         print('Load checkpoint')
 
     if gpu:

@@ -86,31 +86,34 @@ class DCT_Learning_Module(nn.Module):
         xq_temp = x_temp * q_temp  # [B, C, 8, 8, 32, 32]
         x1 = xq_temp.reshape(B, 64 * C, H // 8, W // 8)  # [B, 256, 32, 32]
         x = torch.cat([x0, x1], dim=1)
-        
         return x
 
 
 from model.unet_parts import *
 class FC_DCT_Only(nn.Module):
-    def __init__(self,in_ch,n_classes):
-        super().__init__() 
+    def __init__(self,n_channels=512,n_classes=1):
+        super(FC_DCT_Only,self).__init__() 
         # (B,512,64,64)
-        self.down = RRU_first_down(in_ch, 256)
+        self.dct_learning_module = DCT_Learning_Module()
+        self.down = RRU_first_down(512, 256)
         self.down1 = RRU_down(256, 256) # 32
         self.down2 = RRU_down(256, 64) # 16
         self.down3 = RRU_down(64, 32) # 8
         self.flatten = nn.Flatten()
         self.fc1 = nn.Linear(32*8*8,512)
+        self.dropout = nn.Dropout(0.5)
         self.fc2 = nn.Linear(512,n_classes)
         self.relu = nn.ReLU()
 
-    def forward(self,x): # 일단 jpeg 학습 모듈 ouput이 (B,512,64,64)
+    def forward(self,x,qtable): # 일단 jpeg 학습 모듈 ouput이 (B,512,64,64)
+        x = self.dct_learning_module(x,qtable)
         x = self.down(x)
         x = self.down1(x)
         x = self.down2(x)
         x = self.down3(x)
         x = self.flatten(x)
         x = self.relu(self.fc1(x))
+        x = self.dropout(x)
         x = self.fc2(x)
         
 
