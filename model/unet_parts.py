@@ -132,14 +132,14 @@ class RRU_up_dct(nn.Module):
                 nn.ConvTranspose2d(in_ch // 2, in_ch // 2, 2, stride=2),
                 nn.GroupNorm(32, in_ch // 2))
 
-        self.conv = RRU_double_conv(in_ch, out_ch)
+        self.conv = RRU_double_conv(in_ch + in_ch // 2, out_ch)
         self.relu = nn.ReLU(inplace=True)
 
         self.res_conv = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, kernel_size=1, bias=False),
+            nn.Conv2d(in_ch + in_ch // 2, out_ch, kernel_size=1, bias=False),
             nn.GroupNorm(32, out_ch))
         self.res_conv_back = nn.Sequential(
-            nn.Conv2d(out_ch, in_ch, kernel_size=1, bias=False))
+            nn.Conv2d(out_ch, in_ch + in_ch // 2, kernel_size=1, bias=False))
 
     def forward(self, x1, x2, x3):
         x1 = self.up(x1)
@@ -154,7 +154,6 @@ class RRU_up_dct(nn.Module):
                         diffX, 0))
 
         x = self.relu(torch.cat([x3, x2, x1], dim=1))
-
         # the first ring conv
         ft1 = self.conv(x)
         r1 = self.relu(self.res_conv(x) + ft1)

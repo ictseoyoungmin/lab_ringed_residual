@@ -46,8 +46,8 @@ class DCT_RRUnet(nn.Module):
         self.down2 = RRU_down(64, 128) # 256->128
         self.down3 = RRU_down(128, 256) # 128->64
         self.down4 = RRU_down(256, 256) # 64->32
-        self.up1 = RRU_up_dct(640, 128) # 32->64
-        self.up2 = RRU_up_dct(196, 64) # 64->128
+        self.up1 = RRU_up_dct(512, 128) # 32->64
+        self.up2 = RRU_up_dct(256, 64) # 64->128
         self.up3 = RRU_up(128, 32) # 128->256
         self.up4 = RRU_up(64, 32) # 256->512
         self.out = outconv(32, n_classes) # 512
@@ -69,8 +69,8 @@ class DCT_RRUnet(nn.Module):
             nn.ReLU(inplace=True)
             )
         # DCT 가정 1. stacked model / 2. u model
-        self.down_dct = RRU_first_down(512, 64) # size 64
-        self.down1_dct = RRU_down(64, 128) # 64->32
+        self.down_dct = RRU_first_down(512, 128) # size 64
+        self.down1_dct = RRU_down(128, 256) # 64->32
         # self.down2_dct = RRU_down(64, 128) # 32->16
 
        
