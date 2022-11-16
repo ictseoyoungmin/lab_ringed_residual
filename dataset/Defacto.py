@@ -143,11 +143,36 @@ def test(model,device,index,mode,img_size,dir_img,dir_mask):
 
 
     inp = torch.Tensor([img.numpy()]).to(device)
-    print(inp.shape)
     with torch.no_grad():
         pred = model(transformi(inp)) # normalize none
 
     return pred, img, mask
+
+def test_dct(model,device,index,mode,img_size,dir_img,dir_mask):
+    model.eval()
+    transformi = transforms.Compose([
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+                ])
+    testdata = DefactoDataset(dir_img,
+               dir_mask,
+               12000,
+               img_size,
+               mode,transformi)
+
+    jpg_artifact = testdata.__getitem__(index)['artifact']
+    mask = testdata.__getitem__(index)['landmarks']
+    qtable = testdata.__getitem__(index)['qtable']
+    img = testdata.__getitem__(index)['image']
+
+    inp = jpg_artifact.unsqueeze(0).to(device)
+    qtable = qtable.unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        pred = model(inp,qtable) # normalize none
+
+    return pred, img, mask
+
 
 # tif to jpg in tif dir
 if __name__ == '__main__':

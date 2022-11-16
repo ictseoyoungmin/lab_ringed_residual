@@ -7,7 +7,20 @@ get_jpeg_info : cv
 import jpegio
 import PIL.Image as Image
 import numpy as np
+# _______________________________________________
+import os,sys
+sys.path.append(os.getcwd())
+import torch
+from model.unet_model import Ringed_Res_Unet,DCT_RRUnet # 사용 모델
+from dataset.Defacto import * # defacto 데이터셋 한정 테스트 모듈
+import torch.nn.functional as F
+import torch.nn as nn
+import cv2 as cv
+import matplotlib.pyplot as plt
+import numpy as np
+import torchvision.transforms as transforms
 
+# ______________________________________
 def get_jpeg_info( im_path:str):
         """
         :param im_path: JPEG image path
@@ -83,9 +96,37 @@ def get_jpeg_info( im_path:str):
 def cv_convert_test(im_path):
     img = np.array(Image.open(p).convert('YCbCr'))
 
-    
+def dct_test_test():
+    dct_rrunet = DCT_RRUnet().cuda()
+    dct_rrunet.load_state_dict(torch.load('./result/logs/defactor/DCT_RRUnet/'+
+    '\DCT-[val_dice]-0.8828-[train_loss]-0.1131-ep2.pkl')) 
+    INDEX =  102# 100
+    MODE = 'te1st' # 'any' : no purmute , no normalize / 'test' same 'train' condition
+    DIR_IMG = r"E:\splicing_2_img\img"
+    DIR_MASK = r"E:\splicing_2_annotations\probe_mask"
+    IMG_SIZE = 512
+    device = torch.device("cuda:0")
+
+    dct_rrunet.eval()
+    transformi = transforms.Compose([
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+                ])
+    testdata = DefactoDataset(DIR_IMG,
+                DIR_MASK,
+                12000,
+                IMG_SIZE,
+                MODE,transformi)
+
+    dict_t = testdata.__getitem__(INDEX)
+
+    return dict_t
+
 if __name__ == "__main__":
 
-    dct,qtables = get_jpeg_info(r"C:\Users\zxcas\PythonWork\DATASETS\Forgery\copymove_img\img\0_000000000071.tif")
-    print(np.shape(dct))
-    print(np.shape(qtables))
+    dc = dct_test_test()
+
+    # test1 dct_coef, qtable Test #
+    # dct,qtables = get_jpeg_info(r"C:\Users\zxcas\PythonWork\DATASETS\Forgery\copymove_img\img\0_000000000071.tif")
+    # print(np.shape(dct))
+    # print(np.shape(qtables))
