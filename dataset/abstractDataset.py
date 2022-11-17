@@ -17,7 +17,7 @@ import cv2
 class AbstractDataset(ABC):
     YCbCr2RGB = torch.tensor([[1, 0, 1.402], [1, -0.34414, -.71414], [1, 1.772, 0]], dtype=torch.float64)
 
-    def __init__(self, crop_size, grid_crop: bool, blocks: list, DCT_channels=3):
+    def __init__(self, crop_size, grid_crop: bool, blocks: list, DCT_channels=1):
         """
         :param crop_size: (H, W) or None. H and W must be the multiple of 8 if grid_crop==True.
         :param grid_crop: T: crop within 8x8 grid. F: crop anywhere.
@@ -105,7 +105,6 @@ class AbstractDataset(ABC):
         img_RGB = np.array(Image.open(im_path).convert("RGB"))
 
         h, w = img_RGB.shape[0], img_RGB.shape[1]
-
         if 'DCTcoef' in self._blocks or 'DCTvol' in self._blocks or 'rawRGB' in self._blocks or 'qtable' in self._blocks:
             DCT_coef, qtables = self._get_jpeg_info(im_path)
 

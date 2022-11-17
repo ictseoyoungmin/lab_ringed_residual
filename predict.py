@@ -4,12 +4,90 @@
 아직 사용x
 """
 
-from model.unet_model import Ringed_Res_Unet
+from dataset.Defacto import *
+from loss.dice_loss import dice_coeff
+from model.unet_model import Ringed_Res_Unet,DCT_RRUnet
 import matplotlib.pyplot as plt
 import torch
 from PIL import Image
 import numpy as np
 import os
+from torch.utils.data import DataLoader
+
+
+def test_dataset_dice(model,img_size,dir_img,dir_mask,name = 'RRU-Net'):
+    model.eval()
+    testdata = DefactoDataset(dir_img,
+               dir_mask,
+               10000,
+               img_size,
+               "0",None)
+    test_dataloader = DataLoader(testdata,2)
+
+    test_dice = 0.0
+    if 'DCT' in name:
+        for i,(data) in enumerate(test_dataloader,1):
+            jpg_artifact = data['artifact']
+            mask = data['landmarks']
+            qtable =data['qtable']
+
+            if torch.cuda.is_available() :
+                jpg_artifact = jpg_artifact.cuda()
+                mask = mask.cuda()
+                qtable = qtable.cuda()
+                model.cuda()
+
+            with torch.no_grad():
+                pred = model(jpg_artifact,qtable) # normalize none
+            pred = (torch.sigmoid(pred) > 0.5).float()
+            test_dice += dice_coeff(pred, mask).item()
+    else:
+        transformi = transforms.Compose([
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+                ])
+        for i,(data) in enumerate(test_dataloader,1):
+            img = data['image']
+            mask = data['landmarks']
+
+            if torch.cuda.is_available() :
+                img = img.cuda()
+                mask = mask.cuda()
+                model.cuda()
+
+            with torch.no_grad():
+                pred = model(transformi(img)) # normalize none
+            pred = (torch.sigmoid(pred) > 0.5).float()
+            test_dice += dice_coeff(pred, mask).item()
+
+    test_dice = test_dice / i
+    print(test_dice)
+    return test_dice
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def resize_and_crop(pilimg, scale=0.5, final_height=None):
     w = pilimg.size[0]

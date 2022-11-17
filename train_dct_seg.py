@@ -159,7 +159,7 @@ def main():
     dir_image=r'E:\splicing_2_img\img_jpg'
     dir_mask =  r"E:\splicing_2_annotations\probe_mask"
     transfer_learing = True # 전이학습 한번 진행 후, state dict 확인하여 계속 True로 둬야하는지 체크 필요
-    tl_model = "DCT-[val_dice]-0.8828-[train_loss]-0.1131-ep2.pkl"
+    tl_model = "DCT-[val_dice]-0.9011-[train_loss]-0.0902-ep6.pkl"
 
 
     # log directory 생성

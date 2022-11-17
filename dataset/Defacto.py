@@ -18,6 +18,7 @@ from torchvision.transforms import transforms
 from torch.utils.data import DataLoader,random_split
 import PIL.Image as Image
 import cv2 as cv
+import shutil as sh
 
 # https://www.kaggle.com/code/alerium/defacto-test
 class DefactoDataset(AbstractDataset):
@@ -37,6 +38,10 @@ class DefactoDataset(AbstractDataset):
             'image_path':[os.path.join(self.im_root_dir,_) for _ in sorted(os.listdir(self.im_root_dir))],
             'mask_path':[os.path.join(self.label_root_dir,_) for _ in sorted(os.listdir(self.label_root_dir))]
                          })
+        # self.df = pd.DataFrame({
+        #     'image_path':[_ for _ in sorted(os.listdir(self.im_root_dir))],
+        #     'mask_path':[_ for _ in sorted(os.listdir(self.label_root_dir))]
+        #                  })
         name , label = self.prepare()
 
         self.name = name
@@ -58,6 +63,12 @@ class DefactoDataset(AbstractDataset):
         return image , mask
     
     def __getitem__(self,idx):
+        # i = idx
+        # while True: # 임시
+        #     if self.df['image_path'].iloc[i].endswith("tif"):
+        #         idx +=i
+        #     else:
+        #         break
         mask = np.array(Image.open(self.df['mask_path'].iloc[idx]).convert("L"))
         mask[mask > 0] = 1
         x,y,z = self._create_tensor(self.df['image_path'].iloc[idx], mask)
@@ -88,9 +99,6 @@ class DefactoDataset(AbstractDataset):
             y = y.ge(0.5).float() # element-wise로 값을 비교해 크거나 같으면 True를, 작으면 False를 반환한다.
             y = y.permute(1,2,0)
 
-        # 위조면 [0,1] 아니면 [1,0]
-        # todo abstract dataset 상속으로 위조,정상 데이터 세트 정의 구별
-        # label = torch.zeros((2,)).float()
         if True :# label == 'forgery'
             label = torch.tensor(1,dtype=torch.long)
         else:
@@ -150,15 +158,11 @@ def test(model,device,index,mode,img_size,dir_img,dir_mask):
 
 def test_dct(model,device,index,mode,img_size,dir_img,dir_mask):
     model.eval()
-    transformi = transforms.Compose([
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
-                ])
     testdata = DefactoDataset(dir_img,
                dir_mask,
-               12000,
+               10000,
                img_size,
-               mode,transformi)
+               mode,None)
 
     jpg_artifact = testdata.__getitem__(index)['artifact']
     mask = testdata.__getitem__(index)['landmarks']
@@ -173,54 +177,93 @@ def test_dct(model,device,index,mode,img_size,dir_img,dir_mask):
 
     return pred, img, mask
 
-
 # tif to jpg in tif dir
 if __name__ == '__main__':
-    tif_dir = r"E:\splicing_3_img\img"
-    out_dir = r"E:\splicing_3_img\img_jpg"
-
+    tif_dir = r"C:\Users\zxcas\PythonWork\DATASETS\CASIA2.0\Tp"
+    out_dir = r"C:\Users\zxcas\PythonWork\DATASETS\CASIA2.0\Tp_jpg"
+    mask_dir = r"C:\Users\zxcas\PythonWork\DATASETS\CASIA2.0\Groundtruth"
+    mask_out_dir = r"C:\Users\zxcas\PythonWork\DATASETS\CASIA2.0\Groundtruth_jpg"
     os.makedirs(out_dir,exist_ok=True)
+    os.makedirs(mask_out_dir,exist_ok=True)
 
     source = os.listdir(tif_dir)
     l = len(source)
-    print('total iamges : ',l)
+    # print('total iamges : ',l)
 
-    for i,infile in enumerate(source,1):
+    # for i,infile in enumerate(source,1):
+    #     try:
+    #         if infile[-3:] == "tif":
+    #             outfile = infile[:-3] + "jpg"
+    #             im = Image.open(os.path.join(tif_dir,infile))
+    #             out = im.convert("RGB")
+    #             out.save(os.path.join(out_dir,outfile), "JPEG", quality=100)
+    #         if  i %100 ==0: 
+    #             print(f"{i} images processed. {i/l:.3}  done. ")
+    #     except:
+    #         print(i)
+       
+
+    print(len(os.listdir(tif_dir)))
+    print(len(os.listdir(mask_dir)))
+    """
+    10765
+    10765
+    """
+    images = sorted(os.listdir(tif_dir))
+    
+    maskes = sorted(os.listdir(mask_dir))
+
+    for i,data in enumerate(zip(images,maskes),1):
+        infile,mask = data
         try:
             if infile[-3:] == "tif":
+                # image
                 outfile = infile[:-3] + "jpg"
                 im = Image.open(os.path.join(tif_dir,infile))
                 out = im.convert("RGB")
                 out.save(os.path.join(out_dir,outfile), "JPEG", quality=100)
+
+                # mask
+                outfile = mask[:-3] + "jpg"
+                im = Image.open(os.path.join(mask_dir,mask))
+                out = im.convert("L")
+                out.save(os.path.join(mask_out_dir,outfile), "JPEG", quality=100)
             if  i %100 ==0: 
                 print(f"{i} images processed. {i/l:.3}  done. ")
         except:
             print(i)
-       
 
-    print(len(os.listdir(tif_dir)))
-    print(len(os.listdir(out_dir)))
-    """
-    10765
-    10765
-    """
+    mask_dir = r"C:\Users\zxcas\PythonWork\DATASETS\CASIA2.0\Groundtruth_jpg"
+    out_dir = r"C:\Users\zxcas\PythonWork\DATASETS\CASIA2.0\TP_jpg"
 
-    # mask_dir = r"E:\splicing_1_annotations\probe_mask"
+    testdata = DefactoDataset(out_dir,
+            mask_dir,
+            -1,
+            (512,512),
+            "tr0in",None)
 
-    # testdata = DefactoDataset(out_dir,
-    #         mask_dir,
-    #         2000,
-    #         (512,512),
-    #         "train",None)
+    def match_test():
+        name = testdata.name
+        label = testdata.label
+        for data in zip(name,label):
+            n,l = data   
+            if not (n[:-4] in l):
+                print("doesn't match pare")
+                print(n)
+                print(l)
+                return 0
+        return 1
+    print(match_test())
+    # def mask_move(isMatch:bool,mask_dir,new_mask_path):
+    #     os.makedirs( new_mask_path,exist_ok=True)
+    #     for img_name in os.listdir(out_dir):
+    #         sh.move(os.path.join(mask_dir,img_name),
+    #         os.path.join(new_mask_path,img_name))
 
-    # def match_test():
-    #     name = testdata.name
-    #     label = testdata.label
-    #     for data in zip(name,label):
-    #         n,l = data
-    #         print(n in l)    
-    #         if not (n in l):
-    #             print("doesn't match pare")
-    #             break
-    #match_test()
-    #print(testdata.df.describe())
+
+    # # mask_move(-1,mask_dir,new_mask_path)
+    # with open("./CASIA_list.txt",'r') as f:
+    #     text = f.read()
+    # text = text.replace(',png','')
+    # with open("./CASIA_list2.txt",'w') as f:
+    #     f.write(text)
