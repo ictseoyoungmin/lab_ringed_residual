@@ -4,7 +4,7 @@ defacto dataset으로 RRU-Net 네트워크 훈련 코드
 python train.py로 네트워크 훈련한 다음 RRU_train_test.ipynb 파일에서 결과 확인
 가까운 시일 내 predict.py로 성능평가 해야 함 
 """
-
+import gc
 import torch.backends.cudnn as cudnn
 import torch
 from torch import nn
@@ -26,7 +26,8 @@ def train_net(net,
               dataset=None,
               dir_logs=None,
               dir_image=r'E:\splicing_2_img\img_jpg',
-              dir_mask = r"E:\splicing_2_annotations\probe_mask"
+              dir_mask = r"E:\splicing_2_annotations\probe_mask",
+              chk_ep=-1
               ):
 
     # splicing_1_img 개수는 10765
@@ -117,7 +118,10 @@ def train_net(net,
         Train_loss.append(epoch_loss / i)
         Valida_dice.append(val_dice)
         EPOCH.append(epoch)
-            
+        torch.cuda.empty_cache()
+        gc.collect()
+        time.sleep(3.0)
+
         fig = plt.figure()
         plt.title('Training Process')
         plt.xlabel('epoch')
@@ -129,17 +133,17 @@ def train_net(net,
         plt.savefig(dir_logs + 'Training Process for dct-{}.png'.format(lr), dpi=600)
         plt.close()
 
-        if epoch < 140:
+        if True : #epoch < 140:
             torch.save(net.state_dict(),
-                   dir_logs + 'DCT-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(val_dice, epoch_loss / i,3+epoch+1))
+                   dir_logs + 'DCT-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(val_dice, epoch_loss / i,chk_ep+epoch+1))
         spend_per_time = time.time() - start_epoch
         print('Spend time: {:.3f}s'.format(spend_per_time))
         spend_total_time.append(spend_per_time)
         print()
 
-    for n,p in net.named_parameters():
-        print(n,p)
-        break
+    # for n,p in net.named_parameters():
+    #     print(n,p)
+    #     break
 
     Tt = int(sum(spend_total_time))    
     print('Total time : {}m {}s'.format(Tt//60,Tt%60))
@@ -147,37 +151,36 @@ def train_net(net,
 
 def main():
     # config parameters
-    epochs = 3
-    batchsize = 2
+    epochs = 6
+    batchsize = 1
     image_size = 512 #  x(512,512,3) y(512,512,1)
     gpu = True
     lr = 1e-3
-    checkpoint = True
     dataset = "defactor" #'CASIA'
-    model = 'DCT_RRUnet'
+    model = 'DRRUNet_transfer'
     dir_logs = './result/logs/{}/{}/'.format(dataset, model)
-    dir_image=r'E:\splicing_2_img\img_jpg'
-    dir_mask =  r"E:\splicing_2_annotations\probe_mask"
-    transfer_learing = True # 전이학습 한번 진행 후, state dict 확인하여 계속 True로 둬야하는지 체크 필요
-    tl_model = "DCT-[val_dice]-0.9011-[train_loss]-0.0902-ep6.pkl"
-
-
+    dir_image=r'F:\datasets\Defacto_splicing\splicing_2_img\img_jpg'
+    dir_mask =  r"F:\datasets\Defacto_splicing\splicing_2_annotations\probe_mask"
+    checkpoint = False
+    transfer_learing = True # RRU의 다운 샘플 블록 전이학습 한번 진행 
+    chk_model = ""
+    tl_model = "RRU-[val_dice]-0.6810-[train_loss]-0.3083-ep19.pkl" # 19시작
+    chk_ep = 0 #int(str(sorted(os.listdir(os.path.join('./result/logs/',dataset,model)))[-2])[-5])
+    print("chk-ep: ",chk_ep)
     # log directory 생성
     os.makedirs(dir_logs,exist_ok=True)
 
-    net = DCT_RRUnet(n_channals=3, n_classes=1)
+    net = DCT_RRUnet(n_channals=3, n_classes=1,mode = "ori") # ori - npnfreeze
     # 훈련 epoch 나눠서 진행 할 때 True 사용
 
     if checkpoint: # epoch 3-img_1 3-img_2 *4
-        net.load_state_dict(torch.load('./result/logs/{}/{}/'.format(dataset, model)+
-            tl_model))
-        transfer_learing = True # todo : False
+        net.load_state_dict(torch.load(os.path.join('./result/logs/',dataset, model,chk_model)))
         print('Load checkpoint')
     
     if transfer_learing:
         # tr = Ringed_Res_Unet()
-        tr = DCT_RRUnet()
-        tr.load_state_dict(torch.load("./result/logs/{}/{}/".format(dataset, model)+
+        tr = Ringed_Res_Unet()
+        tr.load_state_dict(torch.load("./result/logs/{}/{}/".format(dataset, "RRUNet")+
             tl_model,
             map_location=torch.device('cpu')))
         for i in range(5): # 0~4
@@ -190,8 +193,10 @@ def main():
         print("Finish load tr weights")
 
     if gpu:
-        net.cuda()
-        # cudnn.benchmark = True  # faster convolutions, but more memory
+        net = torch.nn.DataParallel(net, device_ids=(0,)).cuda()
+        cudnn.benchmark = True  # faster convolutions, but more memory
+        cudnn.deterministic = False
+        cudnn.enabled = True
 
     train_net(net=net,
               epochs=epochs,
@@ -203,7 +208,8 @@ def main():
               dir_logs=dir_logs,
               checkpoint=checkpoint,
               dir_image=dir_image,
-              dir_mask=dir_mask)
+              dir_mask=dir_mask,
+              chk_ep=chk_ep)
 
 if __name__ == '__main__':
     main()

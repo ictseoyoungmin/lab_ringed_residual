@@ -100,7 +100,7 @@ class AbstractDataset(ABC):
         return DCT_coef, qtables
 
     def _create_tensor(self, im_path, mask):
-        ignore_index = 0
+        ignore_index = -1.
 
         img_RGB = np.array(Image.open(im_path).convert("RGB"))
 
@@ -122,7 +122,10 @@ class AbstractDataset(ABC):
             # Pad if crop_size is larger than image size
             if h < crop_size[0] or w < crop_size[1]:
                 # pad img_RGB
-                temp = np.full((max(h, crop_size[0]), max(w, crop_size[1]), 3), 127.5)
+                if len(self._blocks) == 1: # RGB only
+                    temp = np.full((max(h, crop_size[0]), max(w, crop_size[1]), 3), 0.) 
+                else:
+                    temp = np.full((max(h, crop_size[0]), max(w, crop_size[1]), 3), 127.5)
                 temp[:img_RGB.shape[0], :img_RGB.shape[1], :] = img_RGB
                 img_RGB = temp
 
@@ -148,6 +151,9 @@ class AbstractDataset(ABC):
                 s_r = random.randint(0, max(h - crop_size[0], 0))
                 s_c = random.randint(0, max(w - crop_size[1], 0))
 
+            # fix for test
+            s_r = 0
+            s_c = 0
             # crop img_RGB
             img_RGB = img_RGB[s_r:s_r+crop_size[0], s_c:s_c+crop_size[1], :]
 
@@ -162,7 +168,10 @@ class AbstractDataset(ABC):
 
         # handle 'RGB'
         if 'RGB' in self._blocks:
-            t_RGB = (torch.tensor(img_RGB.transpose(2,0,1), dtype=torch.float)-127.5)/127.5  # final
+            if len(self._blocks) == 1:
+                t_RGB = (torch.tensor(img_RGB.transpose(2,0,1), dtype=torch.float))/255.  # final
+            else:
+                t_RGB = (torch.tensor(img_RGB.transpose(2,0,1), dtype=torch.float)-127.5)/127.5  # final
 
         # handle 'DCTvol'
         if 'DCTvol' in self._blocks:

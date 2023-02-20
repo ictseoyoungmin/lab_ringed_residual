@@ -3,6 +3,7 @@
 모델 훈련에 사용되는 DiceLoss
 """
 import torch
+import torch.nn as nn
 from torch.autograd import Function, Variable
 
 class DiceCoeff(Function):
@@ -10,7 +11,7 @@ class DiceCoeff(Function):
 
     def forward(self, input, target):
         self.save_for_backward(input, target)
-        eps = 0.0001
+        eps = 1e-7
         self.inter = torch.dot(input.view(-1), target.view(-1))
         self.union = torch.sum(input) + torch.sum(target) + eps
 
@@ -43,3 +44,30 @@ def dice_coeff(input, target):
         s = s + DiceCoeff().forward(c[0], c[1])
 
     return s / (i + 1)
+
+
+def dice_coeff_loss(pred, target):
+    smooth = 1e-7
+    num = pred.size(0)
+    m1 = pred.view(num, -1)  # Flatten
+    m2 = target.view(num, -1)  # Flatten
+    intersection = (m1 * m2).sum()
+
+    return (2. * intersection + smooth) / (m1.sum() + m2.sum() + smooth)
+
+
+class SoftDiceLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True,soft=False):
+        super(SoftDiceLoss, self).__init__()
+        self.soft = soft
+    def forward(self, logits, targets):
+        if self.soft:
+            probs = torch.sigmoid(logits)
+        else:
+            probs = logits
+        num = targets.size(0)  # Number of batches
+
+        score = dice_coeff_loss(probs, targets)
+        print(score)
+        score = 1 - score.sum() / num
+        return score

@@ -5,7 +5,7 @@
 """
 
 from dataset.Defacto import *
-from loss.dice_loss import dice_coeff
+from loss.dice_loss import SoftDiceLoss,dice_coeff_loss
 from model.unet_model import Ringed_Res_Unet,DCT_RRUnet
 import matplotlib.pyplot as plt
 import torch
@@ -15,20 +15,29 @@ import os
 from torch.utils.data import DataLoader
 
 
-def test_dataset_dice(model,img_size,dir_img,dir_mask,name = 'RRU-Net'):
+def test_dataset_dice(model,img_size,dir_img,dir_mask,name = 'RRU-Net',test_loader=None):
     model.eval()
-    testdata = DefactoDataset(dir_img,
-               dir_mask,
-               10000,
-               img_size,
-               "0",None)
-    test_dataloader = DataLoader(testdata,2)
+    if test_loader == None:
+        if dir_img == r"C:\Users\zxcas\PythonWork\DATASETS\CASIA2.0\Tp_jpg":
+            num = 3000
+        else:
+            num = 10000
+        print("eval nums : ",num)
+        testdata = DefactoDataset(dir_img,
+                dir_mask,
+                num,
+                img_size,
+                "0",None)
+        test_dataloader = DataLoader(testdata,1)
+    else:
+        test_dataloader = test_loader
 
     test_dice = 0.0
-    if 'DCT' in name:
+    acc_count = 0 # only tamp
+    if 'DCT' in name or 'DRRU' in name:
         for i,(data) in enumerate(test_dataloader,1):
             jpg_artifact = data['artifact']
-            mask = data['landmarks']
+            mask = torch.relu(data['landmarks']) # ignore index -1
             qtable =data['qtable']
 
             if torch.cuda.is_available() :
@@ -39,13 +48,19 @@ def test_dataset_dice(model,img_size,dir_img,dir_mask,name = 'RRU-Net'):
 
             with torch.no_grad():
                 pred = model(jpg_artifact,qtable) # normalize none
-            pred = (torch.sigmoid(pred) > 0.5).float()
-            test_dice += dice_coeff(pred, mask).item()
+          
+            pred = torch.sigmoid(pred)
+            d = dice_coeff_loss(pred, mask).item()
+            test_dice += d
+            pred = pred.squeeze(0)
+            pred = pred.permute(1,2,0).detach().cpu().numpy()
+
+            acc_count+= int(True in (pred>0.5))
     else:
-        transformi = transforms.Compose([
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
-                ])
+        # transformi = transforms.Compose([
+        #         transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                      std=[0.229, 0.224, 0.225])
+        #         ])
         for i,(data) in enumerate(test_dataloader,1):
             img = data['image']
             mask = data['landmarks']
@@ -56,12 +71,17 @@ def test_dataset_dice(model,img_size,dir_img,dir_mask,name = 'RRU-Net'):
                 model.cuda()
 
             with torch.no_grad():
-                pred = model(transformi(img)) # normalize none
-            pred = (torch.sigmoid(pred) > 0.5).float()
-            test_dice += dice_coeff(pred, mask).item()
-
+                pred = model(img) # normalize none
+            pred = torch.sigmoid(pred)
+            d = dice_coeff_loss(pred, mask).item()
+            test_dice += d
+            pred = pred.squeeze(0)
+            pred = pred.permute(1,2,0).detach().cpu().numpy()
+            acc_count+= int(True in (pred>0.5))
+        
     test_dice = test_dice / i
-    print(test_dice)
+    print("dice : ",test_dice)
+    print('accuracy : ',acc_count/i)
     return test_dice
 
 

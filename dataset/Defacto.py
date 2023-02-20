@@ -19,6 +19,20 @@ from torch.utils.data import DataLoader,random_split
 import PIL.Image as Image
 import cv2 as cv
 import shutil as sh
+import random
+
+def fix_seed(random_seed):
+    """
+    fix seed to control any randomness from a code 
+    (enable stability of the experiments' results.)
+    """
+    torch.manual_seed(random_seed)
+    torch.cuda.manual_seed(random_seed)
+    torch.cuda.manual_seed_all(random_seed)  # if use multi-GPU
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(random_seed)
+    random.seed(random_seed)
 
 # https://www.kaggle.com/code/alerium/defacto-test
 class DefactoDataset(AbstractDataset):
@@ -28,6 +42,7 @@ class DefactoDataset(AbstractDataset):
                     ):
         
         super().__init__(crop_size, grid_crop, blocks, DCT_channels)
+        fix_seed(42)
         self.im_root_dir = im_root_dir
         self.label_root_dir = label_root_dir
         self.transform = transform
@@ -35,24 +50,19 @@ class DefactoDataset(AbstractDataset):
         self.mode = mode
         self.img_size = img_size
         self.df = pd.DataFrame({
-            'image_path':[os.path.join(self.im_root_dir,_) for _ in sorted(os.listdir(self.im_root_dir))],
-            'mask_path':[os.path.join(self.label_root_dir,_) for _ in sorted(os.listdir(self.label_root_dir))]
+            'image_path':[os.path.join(self.im_root_dir,_) for _ in sorted(os.listdir(self.im_root_dir))[:self.num]],
+            'mask_path':[os.path.join(self.label_root_dir,_) for _ in sorted(os.listdir(self.label_root_dir))[:self.num]]
                          })
         # self.df = pd.DataFrame({
         #     'image_path':[_ for _ in sorted(os.listdir(self.im_root_dir))],
         #     'mask_path':[_ for _ in sorted(os.listdir(self.label_root_dir))]
         #                  })
-        name , label = self.prepare()
 
-        self.name = name
-        self.label = label
+        self.name = self.df['image_path'].iloc[:self.num]
+        self.label = self.df['mask_path'].iloc[:self.num] 
 
     def __len__(self):
         return len(self.name)
-
-    ### for defacto : num 개수 만큼 데이터세트 잘라서 사용
-    def prepare(self):
-        return self.df['image_path'].iloc[:self.num], self.df['mask_path'].iloc[:self.num] 
 
     def _resize(self , sample):
         image, mask = sample[0], sample[1]
@@ -63,62 +73,23 @@ class DefactoDataset(AbstractDataset):
         return image , mask
     
     def __getitem__(self,idx):
-        # i = idx
-        # while True: # 임시
-        #     if self.df['image_path'].iloc[i].endswith("tif"):
-        #         idx +=i
-        #     else:
-        #         break
         mask = np.array(Image.open(self.df['mask_path'].iloc[idx]).convert("L"))
         mask[mask > 0] = 1
-        x,y,z = self._create_tensor(self.df['image_path'].iloc[idx], mask)
-        image = x[:3]
+        # x,y,z = self._create_tensor(self.df['image_path'].iloc[idx], mask)
+        # image = x[:3]
 
-        return {'image': image,'artifact':x, 'landmarks': y,'qtable': z}
-
+        # return {'image': image,'artifact':x, 'landmarks': y,'qtable': z}
+        return self._create_tensor(self.df['image_path'].iloc[idx], mask)
     
-    def _getitem_test(self, idx):
-        image = torch.FloatTensor(cv.imread(self.name[idx]))
-        label = torch.FloatTensor(cv.imread(self.label[idx],cv.IMREAD_GRAYSCALE))
-
-        if self.transform == None:
-            self.transform = transforms.Compose([
-                transforms.Resize((self.img_size,self.img_size),interpolation=transforms.InterpolationMode.BICUBIC),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5,0.5,0.5],std=[0.5,0.5,0.5])
-            ])
-
-        if self.mode in ['train','eval']:
-            x,y  = self._resize((image.permute(2,0,1), label.unsqueeze(0))) # (C,W,H)로 마춰줘야 함
-            x = self.transform(x)
-            y = y.ge(0.5).float()
-        else: # test : 네트워크에 통과되지 않고 바로 plot 가능한 image 반환
-            x = image.permute(2,0,1)
-            y = label.unsqueeze(0)/255.0
-            x,y = self._resize((x/255.0,y))
-            y = y.ge(0.5).float() # element-wise로 값을 비교해 크거나 같으면 True를, 작으면 False를 반환한다.
-            y = y.permute(1,2,0)
-
-        if True :# label == 'forgery'
-            label = torch.tensor(1,dtype=torch.long)
-        else:
-            label[0] = 1.0
-
-        return {'image': x, 'landmarks': y,'label':label}
 
 def load_dataset(total_nums,img_size,batch_size,dir_img,dir_mask):
     # ImageNet 표준으로 정규화 <- 일반적인 관행
-    transformi = transforms.Compose([
-                transforms.Resize((img_size,img_size)),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                              std=[0.229, 0.224, 0.225])
-    ])
 
     dataset = DefactoDataset(dir_img,
                 dir_mask,
                 total_nums,
                 img_size,
-                'train',transformi)
+                'train',None)
 
     # dataset_size = len(dataset)
     train_size =  10000 #int(dataset_size * 0.8)
@@ -129,45 +100,58 @@ def load_dataset(total_nums,img_size,batch_size,dir_img,dir_mask):
     print("validation images len : ",validation_dataset.__len__())
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, shuffle=True)
-    val_dataloader = DataLoader(validation_dataset, batch_size=batch_size, num_workers=0, shuffle=True)
+    val_dataloader = DataLoader(validation_dataset, batch_size=batch_size, num_workers=0, shuffle=False)
     
     return train_dataloader,val_dataloader
 
 def test(model,device,index,mode,img_size,dir_img,dir_mask):
     model.eval()
-    transformi = transforms.Compose([
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
-                ])
+    # transformi = transforms.Compose([
+    #             transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                          std=[0.229, 0.224, 0.225])
+                # ])
     testdata = DefactoDataset(dir_img,
                dir_mask,
                12000,
                img_size,
-               mode,transformi)
-    print(testdata.__len__())
+               mode,None,blocks=('RGB',))
 
-    img = testdata._getitem_test(index)['image']
-    mask = testdata._getitem_test(index)['landmarks']
-
-
+    img,mask,_ =testdata.__getitem__(index) 
     inp = torch.Tensor([img.numpy()]).to(device)
     with torch.no_grad():
-        pred = model(transformi(inp)) # normalize none
+        pred = model(inp) # normalize none
 
+    img = img.permute(1,2,0)
+    h,w= 512,512#np.minimum(512,img.shape[0]),np.minimum(512,img.shape[1])
+    try:
+        for i in range(len(img)-1,0,-1):
+            if img[0,i,0]!=0.:
+                w = i  
+                break
+        for i in range(len(img)-1,0,-1):
+            if img[i,0,0]!=0.:
+                h = i  
+                break
+        img = img[:h,:w,:]
+    except Exception as e:
+        raise (f"""
+            h,w : {h,w}
+            img_shape : {img.shape}
+            value : {img[0,i,0],img[i,0,0]}
+
+        """)
     return pred, img, mask
 
 def test_dct(model,device,index,mode,img_size,dir_img,dir_mask):
     model.eval()
     testdata = DefactoDataset(dir_img,
                dir_mask,
-               10000,
+               12000,
                img_size,
                mode,None)
 
-    jpg_artifact = testdata.__getitem__(index)['artifact']
-    mask = testdata.__getitem__(index)['landmarks']
-    qtable = testdata.__getitem__(index)['qtable']
-    img = testdata.__getitem__(index)['image']
+    jpg_artifact,mask,qtable =  testdata.__getitem__(index)
+    img = jpg_artifact[:3]
 
     inp = jpg_artifact.unsqueeze(0).to(device)
     qtable = qtable.unsqueeze(0).to(device)
@@ -175,7 +159,46 @@ def test_dct(model,device,index,mode,img_size,dir_img,dir_mask):
     with torch.no_grad():
         pred = model(inp,qtable) # normalize none
 
+    img = img.permute(1,2,0)
+    img = (img*125.5+125.5)/255.0
+    h,w=512,512
+    for i in range(len(img)-1,0,-1):
+        if img[0,i,0]!=125.5/255.0:
+            w = i  
+            break
+    for i in range(len(img)-1,0,-1):
+        if img[i,0,0]!=125.5/255.0:
+            h = i  
+            break
+    # print(w,h)
+    img = img[:h,:w,:]
+
     return pred, img, mask
+
+def load_dataset_for_casia(total_nums,img_size,batch_size,dir_img,dir_mask):
+    # ImageNet 표준으로 정규화 <- 일반적인 관행
+
+    dataset = DefactoDataset(dir_img,
+                dir_mask,
+                total_nums,
+                img_size,
+                'train',None)
+
+    # dataset_size = len(dataset)
+    train_size =  2300 #int(dataset_size * 0.8)
+    validation_size = 200 #int(dataset_size * 0.2)
+    test_size = 559
+    train_dataset, validation_dataset, test_dataset = random_split(dataset, [train_size, validation_size,test_size])
+    print("train images len : ",train_dataset.__len__())
+    print("validation images len : ",validation_dataset.__len__())
+    print("test images len : ",test_dataset.__len__())
+
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, shuffle=True)
+    val_dataloader = DataLoader(validation_dataset, batch_size=batch_size, num_workers=0, shuffle=False)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, num_workers=0, shuffle=False)
+    
+    return train_dataloader,val_dataloader,test_dataloader
+
 
 # tif to jpg in tif dir
 if __name__ == '__main__':

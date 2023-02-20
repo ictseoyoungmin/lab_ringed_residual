@@ -38,8 +38,14 @@ class Ringed_Res_Unet(nn.Module):
         return x_seg
 
 class DCT_RRUnet(nn.Module):
-    def __init__(self,n_channals=3, n_classes=1):
+    def __init__(self,n_channals=3, n_classes=1,mode=None):
+        """
+        mode : 'ori' or 'trans'
+        """
         super(DCT_RRUnet, self).__init__()
+        self.mode = mode
+        if self.mode == None:
+            raise "Select JPEG learning module's rr mode"
          # RGB
         self.down = RRU_first_down(n_channals, 32) # size 512
         self.down1 = RRU_down(32, 64) # 512->256
@@ -69,8 +75,15 @@ class DCT_RRUnet(nn.Module):
             nn.ReLU(inplace=True)
             )
         # DCT 가정 1. stacked model / 2. u model
-        self.down_dct = RRU_first_down(512, 128) # size 64
-        self.down1_dct = RRU_down(128, 256) # 64->32
+        # RRU_first_down, RRU_down_dct - LeaklyRelu 적용
+        if self.mode == "ori":
+            self.down_dct = RRU_first_down(512, 128) # size 64
+            self.down1_dct = RRU_down(128, 256) # 64->32
+        elif self.mode == "trans":
+            self.down_dct = RRU_first_down_dct(512,128)
+            self.down1_dct= RRU_down_dct(128,256)
+        else:
+            raise "None type mode. select in [ 'ori', 'trans' ]"
         # self.down2_dct = RRU_down(64, 128) # 32->16
 
        

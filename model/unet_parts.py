@@ -51,6 +51,61 @@ class RRU_first_down(nn.Module):
 
         return r3
 
+### For DCT learning Module
+class RRU_first_down_dct(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super(RRU_first_down_dct, self).__init__()
+        self.conv = RRU_double_conv(in_ch, out_ch)
+        self.relu = nn.LeakyReLU(inplace=True)
+
+        self.res_conv = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, kernel_size=1, bias=False),
+            nn.GroupNorm(32, out_ch)
+        )
+        self.res_conv_back = nn.Sequential(
+            nn.Conv2d(out_ch, in_ch, kernel_size=1, bias=False)
+        )
+
+    def forward(self, x):
+        # the first ring conv
+        ft1 = self.conv(x)
+        r1 = self.relu(ft1 + self.res_conv(x))
+        # the second ring conv
+        ft2 = self.res_conv_back(r1)
+        x = torch.mul(1 + self.relu(ft2), x)
+        # the third ring conv
+        ft3 = self.conv(x)
+        r3 = self.relu(ft3 + self.res_conv(x))
+
+        return r3
+
+class RRU_down_dct(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super(RRU_down_dct, self).__init__()
+        self.conv = RRU_double_conv(in_ch, out_ch)
+        self.relu = nn.LeakyReLU(inplace=True)
+        self.pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        self.res_conv = nn.Sequential(
+            nn.Conv2d(in_ch, out_ch, 1, bias=False),
+            nn.GroupNorm(32, out_ch))
+        self.res_conv_back = nn.Sequential(
+            nn.Conv2d(out_ch, in_ch, kernel_size=1, bias=False))
+
+    def forward(self, x):
+        x = self.pool(x)
+        # the first ring conv
+        ft1 = self.conv(x)
+        r1 = self.relu(ft1 + self.res_conv(x))
+        # the second ring conv
+        ft2 = self.res_conv_back(r1)
+        x = torch.mul(1 + self.relu(ft2), x)
+        # the third ring conv
+        ft3 = self.conv(x)
+        r3 = self.relu(ft3 + self.res_conv(x))
+
+        return r3
+####################################################
 
 class RRU_down(nn.Module):
     def __init__(self, in_ch, out_ch):
