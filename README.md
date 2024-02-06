@@ -3,3 +3,5 @@
 
 ### DRRU-Net
 https://www.mdpi.com/2076-3417/13/5/2922
+
+Demo and comparison : RRU_train_test.ipynb
