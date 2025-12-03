@@ -5,67 +5,93 @@ python train.py로 네트워크 훈련한 다음 RRU_train_test.ipynb 파일에�
 가까운 시일 내 predict.py로 성능평가 해야 함 
 """
 
-import torch.backends.cudnn as cudnn
-import torch
-from torch import nn
-from torch import optim
-from model.unet_model import Ringed_Res_Unet
-from dataset.Defacto import load_dataset
-import matplotlib.pyplot as plt
-import time,os
-# __________________________________________
-from loss.dice_loss import dice_coeff
+import importlib
+import json
+import os
+import time
+from dataclasses import dataclass
+from typing import Optional
 
-def train_net(net,
-              epochs=5,
-              batch_size=1,
-              img_size=512,
-              lr=1e-2,
-              checkpoint=True,
-              gpu=True,
-              dataset=None,
-              dir_logs=None,
-              dir_image=r'E:\splicing_1_img\img_jpg',
-              dir_mask = r"E:\splicing_1_annotations\probe_mask"
-              ):
+import matplotlib.pyplot as plt
+import torch
+import torch.backends.cudnn as cudnn
+from torch import nn, optim
+
+from dataset.Defacto import load_dataset
+from loss.dice_loss import dice_coeff
+from model.unet_model import Ringed_Res_Unet
+
+yaml_spec = importlib.util.find_spec("yaml")
+yaml = importlib.import_module("yaml") if yaml_spec else None
+
+
+@dataclass
+class TrainingConfig:
+    epochs: int = 5
+    batch_size: int = 1
+    img_size: int = 512
+    lr: float = 1e-2
+    checkpoint: bool = True
+    gpu: bool = True
+    dataset: str = "defactor"
+    dir_logs: str = './result/logs/defactor/Ringed_Res_Unet/'
+    dir_image: str = r'E:\\splicing_1_img\\img_jpg'
+    dir_mask: str = r"E:\\splicing_1_annotations\\probe_mask"
+    model: str = 'Ringed_Res_Unet'
+    checkpoint_path: Optional[str] = None
+
+    @staticmethod
+    def from_file(path: str) -> "TrainingConfig":
+        with open(path, 'r') as f:
+            if path.lower().endswith(('.yaml', '.yml')):
+                if yaml is None:
+                    raise ImportError("PyYAML is required to load YAML configuration files.")
+                data = yaml.safe_load(f)
+            else:
+                data = json.load(f)
+
+        return TrainingConfig(**data)
+
+def train_net(net, config: TrainingConfig):
     # training images are square
     # ids = split_ids(get_ids(dir_img))
     # iddataset = split_train_val(ids, val_percent)
 
     # splicing_1_img 개수는 10765
-    train_dataloader, val_dataloader = load_dataset(10764,
-                                                    img_size,
-                                                    batch_size,
-                                                    dir_img =  dir_image,
-                                                    dir_mask = dir_mask
+    train_dataloader, val_dataloader = load_dataset(
+        10764,
+        config.img_size,
+        config.batch_size,
+        dir_img=config.dir_image,
+        dir_mask=config.dir_mask
     )
 
     print(f'''
     Starting training:
-        Epochs: {epochs}
-        Batch size: {batch_size}
-        Image size: {img_size}
-        Learning rate: {lr}
+        Epochs: {config.epochs}
+        Batch size: {config.batch_size}
+        Image size: {config.img_size}
+        Learning rate: {config.lr}
         Training size: {train_dataloader.__len__()}
         Validation size: {val_dataloader.__len__()}
-        Checkpoints: {str(checkpoint)}
-        CUDA: {str(gpu)}
+        Checkpoints: {str(config.checkpoint)}
+        CUDA: {str(config.gpu)}
     ''')
-    N_train = train_dataloader.__len__() * batch_size
+    N_train = train_dataloader.__len__() * config.batch_size
 
     optimizer = optim.Adam(net.parameters(),
-                           lr=lr)
+                           lr=config.lr)
     criterion = nn.BCELoss()
     Train_loss  = []
     Valida_dice = []
     EPOCH = []
     spend_total_time = []
 
-    for epoch in range(epochs):
+    for epoch in range(config.epochs):
         net.train()
 
         start_epoch = time.time()
-        print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
+        print('Starting epoch {}/{}.'.format(epoch + 1, config.epochs))
         # reset the generators
         # train = get_imgs_and_masks(iddataset['train'], dir_img, dir_mask, img_scale, dataset)
         # val = get_imgs_and_masks(iddataset['val'], dir_img, dir_mask, img_scale, dataset)
@@ -82,7 +108,7 @@ def train_net(net,
             # imgs = torch.from_numpy(imgs)
             # true_masks = torch.from_numpy(true_masks)
 
-            if gpu:
+            if config.gpu:
                 imgs = imgs.cuda()
                 true_masks = true_masks.cuda()
 
@@ -98,7 +124,7 @@ def train_net(net,
             loss.backward()
             optimizer.step()
 
-            print('{:.4f} --- loss: {:.4f}, {:.3f}s'.format(i * batch_size / N_train, loss, time.time()-start_batch))
+            print('{:.4f} --- loss: {:.4f}, {:.3f}s'.format(i * config.batch_size / N_train, loss, time.time()-start_batch))
 
         print('Epoch finished ! Loss: {:.4f}'.format(epoch_loss / i))
 
@@ -110,8 +136,8 @@ def train_net(net,
             for i,val in enumerate(val_dataloader): #느려지면 imgs -> img
                 imgs = val['image']
                 true_mask = val['landmarks']
-               
-                if gpu:
+
+                if config.gpu:
                     imgs = imgs.cuda()
                     true_mask = true_mask.cuda()
                     # tot.cuda()
@@ -135,12 +161,12 @@ def train_net(net,
         l2, = plt.plot(EPOCH, Valida_dice, c='blue')
 
         plt.legend(handles=[l1, l2], labels=['Tra_loss', 'Val_dice'], loc='best')
-        plt.savefig(dir_logs + 'Training Process for lr-{}.png'.format(lr), dpi=600)
+        plt.savefig(config.dir_logs + 'Training Process for lr-{}.png'.format(config.lr), dpi=600)
         plt.close()
 
         if epoch < 140:
             torch.save(net.state_dict(),
-                   dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(dataset, val_dice, epoch_loss / i,epoch+15))
+                   config.dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(config.dataset, val_dice, epoch_loss / i,epoch+15))
         spend_per_time = time.time() - start_epoch
         print('Spend time: {:.3f}s'.format(spend_per_time))
         spend_total_time.append(spend_per_time)
@@ -149,45 +175,33 @@ def train_net(net,
     Tt = int(sum(spend_total_time))    
     print('Total time : {}m {}s'.format(Tt//60,Tt%60))
 
-def main():
-    # config parameters
-    epochs = 3
-    batchsize = 2
-    image_size = 512 #  x(512,512,3) y(512,512,1)
-    gpu = True
-    lr = 1e-3
-    checkpoint = True
-    dataset = "defactor" #'CASIA'
-    model = 'Ringed_Res_Unet'
-    dir_logs = './result/logs/{}/{}/'.format(dataset, model)
-    dir_image=r'E:\splicing_2_img\img_jpg'
-    dir_mask =  r"E:\splicing_2_annotations\probe_mask"
 
-    # log directory 생성
-    os.makedirs(dir_logs,exist_ok=True)
+def train_from_config(config: TrainingConfig):
+    os.makedirs(config.dir_logs, exist_ok=True)
 
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
-    # 훈련 epoch 나눠서 진행 할 때 True 사용
-    if checkpoint: # epoch 3-img_1 3-img_2 *4
-        net.load_state_dict(torch.load('./result/logs/{}/{}/\
-defactor-[val_dice]-0.7546-[train_loss]-0.3125-ep15.pkl'.format(dataset, model)))
+    if config.checkpoint and config.checkpoint_path:
+        net.load_state_dict(torch.load(config.checkpoint_path))
         print('Load checkpoint')
 
-    if gpu:
+    if config.gpu:
         net.cuda()
-        # cudnn.benchmark = True  # faster convolutions, but more memory
 
-    train_net(net=net,
-              epochs=epochs,
-              batch_size=batchsize,
-              img_size=image_size,
-              lr=lr,
-              gpu=gpu,
-              dataset=dataset,
-              dir_logs=dir_logs,
-              checkpoint=checkpoint,
-              dir_image=dir_image,
-              dir_mask=dir_mask)
+    train_net(net=net, config=config)
+
+
+def parse_args():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Train Ringed Res-UNet with configuration file")
+    parser.add_argument('--config', required=True, help='Path to JSON or YAML configuration file')
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    config = TrainingConfig.from_file(args.config)
+    train_from_config(config)
 
 if __name__ == '__main__':
     main()
