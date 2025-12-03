@@ -12,9 +12,10 @@ from torch import optim
 from model.unet_model import Ringed_Res_Unet
 from dataset.Defacto import load_dataset
 import matplotlib.pyplot as plt
-import time,os
+import time
 # __________________________________________
 from loss.dice_loss import dice_coeff
+from utils.io import build_checkpoint_path, build_plot_path, ensure_log_dir
 
 def train_net(net,
               epochs=5,
@@ -24,10 +25,16 @@ def train_net(net,
               checkpoint=True,
               gpu=True,
               dataset=None,
-              dir_logs=None,
+              model=None,
               dir_image=r'E:\splicing_1_img\img_jpg',
-              dir_mask = r"E:\splicing_1_annotations\probe_mask"
+              dir_mask = r"E:\splicing_1_annotations\probe_mask",
+              initial_epoch=0
               ):
+    if dataset is None or model is None:
+        raise ValueError('dataset and model must be provided for logging.')
+
+    ensure_log_dir(dataset, model)
+
     # training images are square
     # ids = split_ids(get_ids(dir_img))
     # iddataset = split_train_val(ids, val_percent)
@@ -64,7 +71,7 @@ def train_net(net,
     for epoch in range(epochs):
         net.train()
 
-        start_epoch = time.time()
+        epoch_start_time = time.time()
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
         # reset the generators
         # train = get_imgs_and_masks(iddataset['train'], dir_img, dir_mask, img_scale, dataset)
@@ -123,9 +130,10 @@ def train_net(net,
             val_dice = tot / i
         print('Validation Dice Coeff: {:.4f}'.format(val_dice))
 
+        current_epoch = initial_epoch + epoch + 1
         Train_loss.append(epoch_loss / i)
         Valida_dice.append(val_dice)
-        EPOCH.append(epoch)
+        EPOCH.append(current_epoch)
             
         fig = plt.figure()
         plt.title('Training Process')
@@ -135,13 +143,14 @@ def train_net(net,
         l2, = plt.plot(EPOCH, Valida_dice, c='blue')
 
         plt.legend(handles=[l1, l2], labels=['Tra_loss', 'Val_dice'], loc='best')
-        plt.savefig(dir_logs + 'Training Process for lr-{}.png'.format(lr), dpi=600)
+        plot_path = build_plot_path(dataset, model, lr)
+        plt.savefig(plot_path, dpi=600)
         plt.close()
 
         if epoch < 140:
-            torch.save(net.state_dict(),
-                   dir_logs + '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(dataset, val_dice, epoch_loss / i,epoch+15))
-        spend_per_time = time.time() - start_epoch
+            checkpoint_path = build_checkpoint_path(dataset, model, current_epoch, val_dice, epoch_loss / i)
+            torch.save(net.state_dict(), checkpoint_path)
+        spend_per_time = time.time() - epoch_start_time
         print('Spend time: {:.3f}s'.format(spend_per_time))
         spend_total_time.append(spend_per_time)
         print()
@@ -159,18 +168,17 @@ def main():
     checkpoint = True
     dataset = "defactor" #'CASIA'
     model = 'Ringed_Res_Unet'
-    dir_logs = './result/logs/{}/{}/'.format(dataset, model)
     dir_image=r'E:\splicing_2_img\img_jpg'
     dir_mask =  r"E:\splicing_2_annotations\probe_mask"
-
-    # log directory 생성
-    os.makedirs(dir_logs,exist_ok=True)
+    log_dir = ensure_log_dir(dataset, model)
+    initial_epoch = 0
 
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
     # 훈련 epoch 나눠서 진행 할 때 True 사용
     if checkpoint: # epoch 3-img_1 3-img_2 *4
-        net.load_state_dict(torch.load('./result/logs/{}/{}/\
-defactor-[val_dice]-0.7546-[train_loss]-0.3125-ep15.pkl'.format(dataset, model)))
+        initial_epoch = 15
+        checkpoint_path = log_dir / "defactor-[val_dice]-0.7546-[train_loss]-0.3125-ep15.pkl"
+        net.load_state_dict(torch.load(checkpoint_path))
         print('Load checkpoint')
 
     if gpu:
@@ -184,10 +192,11 @@ defactor-[val_dice]-0.7546-[train_loss]-0.3125-ep15.pkl'.format(dataset, model))
               lr=lr,
               gpu=gpu,
               dataset=dataset,
-              dir_logs=dir_logs,
+              model=model,
               checkpoint=checkpoint,
               dir_image=dir_image,
-              dir_mask=dir_mask)
+              dir_mask=dir_mask,
+              initial_epoch=initial_epoch)
 
 if __name__ == '__main__':
     main()
