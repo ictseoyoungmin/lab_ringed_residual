@@ -2,14 +2,17 @@
 """
 defacto dataset으로 RRU-Net 네트워크 훈련 코드
 python train.py로 네트워크 훈련한 다음 RRU_train_test.ipynb 파일에서 결과 확인
-가까운 시일 내 predict.py로 성능평가 해야 함 
+가까운 시일 내 predict.py로 성능평가 해야 함
 """
 
-import torch.backends.cudnn as cudnn
+import os
+import time
+
+import matplotlib.pyplot as plt
 import torch
-from torch import nn
-from torch import optim
-from model.unet_model import Ringed_Res_Unet
+import torch.backends.cudnn as cudnn
+from torch import nn, optim
+
 from dataset.Defacto import load_dataset
 import matplotlib.pyplot as plt
 import time
@@ -47,29 +50,35 @@ def train_net(net,
                                                     dir_mask = dir_mask
     )
 
-    print(f'''
+class Trainer:
+    def __init__(self, net, train_dataloader, val_dataloader, optimizer, criterion, device, dir_logs, dataset, lr, image_size, checkpoint=True):
+        self.net = net
+        self.train_dataloader = train_dataloader
+        self.val_dataloader = val_dataloader
+        self.optimizer = optimizer
+        self.criterion = criterion
+        self.device = device
+        self.dir_logs = dir_logs
+        self.dataset = dataset
+        self.lr = lr
+        self.image_size = image_size
+        self.checkpoint = checkpoint
+
+        self.train_losses = []
+        self.val_dices = []
+        self.epochs_run = []
+        self.spend_total_time = []
+
+        print(f'''
     Starting training:
-        Epochs: {epochs}
-        Batch size: {batch_size}
-        Image size: {img_size}
+        Batch size: {train_dataloader.batch_size}
+        Image size: {image_size}
         Learning rate: {lr}
-        Training size: {train_dataloader.__len__()}
-        Validation size: {val_dataloader.__len__()}
+        Training size: {len(train_dataloader)}
+        Validation size: {len(val_dataloader)}
         Checkpoints: {str(checkpoint)}
-        CUDA: {str(gpu)}
+        CUDA: {str(device.type == "cuda")}
     ''')
-    N_train = train_dataloader.__len__() * batch_size
-
-    optimizer = optim.Adam(net.parameters(),
-                           lr=lr)
-    criterion = nn.BCELoss()
-    Train_loss  = []
-    Valida_dice = []
-    EPOCH = []
-    spend_total_time = []
-
-    for epoch in range(epochs):
-        net.train()
 
         epoch_start_time = time.time()
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
@@ -77,58 +86,59 @@ def train_net(net,
         # train = get_imgs_and_masks(iddataset['train'], dir_img, dir_mask, img_scale, dataset)
         # val = get_imgs_and_masks(iddataset['val'], dir_img, dir_mask, img_scale, dataset)
 
-        epoch_loss = 0
-
-        for i, data in enumerate(train_dataloader,1):
+        print('Starting epoch {}/{}.'.format(epoch + 1, self.total_epochs))
+        batch_idx = 0
+        for batch_idx, data in enumerate(self.train_dataloader, 1):
             start_batch = time.time()
-            imgs = data['image']
-            true_masks = data['landmarks']
-            # imgs = np.array([i[0] for i in b]).astype(np.float32)
-            # true_masks = np.array([i[1] for i in b]).astype(np.float32) / 255.
+            imgs = data['image'].to(self.device)
+            true_masks = data['landmarks'].to(self.device)
 
-            # imgs = torch.from_numpy(imgs)
-            # true_masks = torch.from_numpy(true_masks)
+            self.optimizer.zero_grad()
 
-            if gpu:
-                imgs = imgs.cuda()
-                true_masks = true_masks.cuda()
-
-            optimizer.zero_grad()
-
-            masks_pred = net(imgs)
+            masks_pred = self.net(imgs)
             masks_probs = torch.sigmoid(masks_pred)
             masks_probs_flat = masks_probs.view(-1)
             true_masks_flat = true_masks.view(-1)
-            loss = criterion(masks_probs_flat, true_masks_flat)
+            loss = self.criterion(masks_probs_flat, true_masks_flat)
 
             epoch_loss += loss.item()
             loss.backward()
-            optimizer.step()
+            self.optimizer.step()
 
-            print('{:.4f} --- loss: {:.4f}, {:.3f}s'.format(i * batch_size / N_train, loss, time.time()-start_batch))
+            print('{:.4f} --- loss: {:.4f}, {:.3f}s'.format(batch_idx * self.train_dataloader.batch_size / n_train, loss, time.time() - start_batch))
 
-        print('Epoch finished ! Loss: {:.4f}'.format(epoch_loss / i))
+        mean_loss = epoch_loss / max(batch_idx, 1)
+        spend_per_time = time.time() - start_epoch
+        print('Epoch finished ! Loss: {:.4f}'.format(mean_loss))
+        print('Spend time: {:.3f}s'.format(spend_per_time))
+        self.spend_total_time.append(spend_per_time)
+        return mean_loss
 
-        # validate the performance of the model
+    def validate(self):
+        self.net.eval()
+        tot = 0.0
+        batch_count = 0
+
         with torch.no_grad():
-            net.eval()
-            tot = 0.0
+            for batch_count, val in enumerate(self.val_dataloader, 1):  # 느려지면 imgs -> img
+                imgs = val['image'].to(self.device)
+                true_mask = val['landmarks'].to(self.device)
 
-            for i,val in enumerate(val_dataloader): #느려지면 imgs -> img
-                imgs = val['image']
-                true_mask = val['landmarks']
-               
-                if gpu:
-                    imgs = imgs.cuda()
-                    true_mask = true_mask.cuda()
-                    # tot.cuda()
-
-                mask_pred = net(imgs)[0]
+                mask_pred = self.net(imgs)[0]
                 mask_pred = (torch.sigmoid(mask_pred) > 0.5).float()
                 tot += dice_coeff(mask_pred, true_mask).item()
 
-            val_dice = tot / i
+        val_dice = tot / max(batch_count, 1)
         print('Validation Dice Coeff: {:.4f}'.format(val_dice))
+        return val_dice
+
+    def save_checkpoint(self, epoch, val_dice, train_loss):
+        if self.checkpoint and epoch < 140:
+            checkpoint_path = os.path.join(
+                self.dir_logs,
+                '{}-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(self.dataset, val_dice, train_loss, epoch + 15)
+            )
+            torch.save(self.net.state_dict(), checkpoint_path)
 
         current_epoch = initial_epoch + epoch + 1
         Train_loss.append(epoch_loss / i)
@@ -139,8 +149,8 @@ def train_net(net,
         plt.title('Training Process')
         plt.xlabel('epoch')
         plt.ylabel('value')
-        l1, = plt.plot(EPOCH, Train_loss, c='red')
-        l2, = plt.plot(EPOCH, Valida_dice, c='blue')
+        l1, = plt.plot(self.epochs_run, self.train_losses, c='red')
+        l2, = plt.plot(self.epochs_run, self.val_dices, c='blue')
 
         plt.legend(handles=[l1, l2], labels=['Tra_loss', 'Val_dice'], loc='best')
         plot_path = build_plot_path(dataset, model, lr)
@@ -155,8 +165,6 @@ def train_net(net,
         spend_total_time.append(spend_per_time)
         print()
 
-    Tt = int(sum(spend_total_time))    
-    print('Total time : {}m {}s'.format(Tt//60,Tt%60))
 
 def main():
     # config parameters
@@ -181,7 +189,7 @@ def main():
         net.load_state_dict(torch.load(checkpoint_path))
         print('Load checkpoint')
 
-    if gpu:
+    if config.gpu:
         net.cuda()
         # cudnn.benchmark = True  # faster convolutions, but more memory
 
