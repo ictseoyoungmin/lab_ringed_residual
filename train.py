@@ -199,27 +199,28 @@ def main():
     os.makedirs(dir_logs,exist_ok=True)
 
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
-    # 훈련 epoch 나눠서 진행 할 때 True 사용
-    if checkpoint: # epoch 3-img_1 3-img_2 *4
-        net.load_state_dict(torch.load('./result/logs/{}/{}/\
-defactor-[val_dice]-0.7546-[train_loss]-0.3125-ep15.pkl'.format(dataset, model)))
+    if config.checkpoint and config.checkpoint_path:
+        net.load_state_dict(torch.load(config.checkpoint_path))
         print('Load checkpoint')
 
-    if gpu:
+    if config.gpu:
         net.cuda()
-        # cudnn.benchmark = True  # faster convolutions, but more memory
 
-    train_net(net=net,
-              epochs=epochs,
-              batch_size=batchsize,
-              img_size=image_size,
-              lr=lr,
-              gpu=gpu,
-              dataset=dataset,
-              dir_logs=dir_logs,
-              checkpoint=checkpoint,
-              dir_image=dir_image,
-              dir_mask=dir_mask)
+    train_net(net=net, config=config)
+
+
+def parse_args():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Train Ringed Res-UNet with configuration file")
+    parser.add_argument('--config', required=True, help='Path to JSON or YAML configuration file')
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    config = TrainingConfig.from_file(args.config)
+    train_from_config(config)
 
 if __name__ == '__main__':
     main()
