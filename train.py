@@ -14,9 +14,41 @@ import torch.backends.cudnn as cudnn
 from torch import nn, optim
 
 from dataset.Defacto import load_dataset
+import matplotlib.pyplot as plt
+import time
+# __________________________________________
 from loss.dice_loss import dice_coeff
-from model.unet_model import Ringed_Res_Unet
+from utils.io import build_checkpoint_path, build_plot_path, ensure_log_dir
 
+def train_net(net,
+              epochs=5,
+              batch_size=1,
+              img_size=512,
+              lr=1e-2,
+              checkpoint=True,
+              gpu=True,
+              dataset=None,
+              model=None,
+              dir_image=r'E:\splicing_1_img\img_jpg',
+              dir_mask = r"E:\splicing_1_annotations\probe_mask",
+              initial_epoch=0
+              ):
+    if dataset is None or model is None:
+        raise ValueError('dataset and model must be provided for logging.')
+
+    ensure_log_dir(dataset, model)
+
+    # training images are square
+    # ids = split_ids(get_ids(dir_img))
+    # iddataset = split_train_val(ids, val_percent)
+
+    # splicing_1_img 개수는 10765
+    train_dataloader, val_dataloader = load_dataset(10764,
+                                                    img_size,
+                                                    batch_size,
+                                                    dir_img =  dir_image,
+                                                    dir_mask = dir_mask
+    )
 
 class Trainer:
     def __init__(self, net, train_dataloader, val_dataloader, optimizer, criterion, device, dir_logs, dataset, lr, image_size, checkpoint=True):
@@ -48,11 +80,11 @@ class Trainer:
         CUDA: {str(device.type == "cuda")}
     ''')
 
-    def train_one_epoch(self, epoch):
-        self.net.train()
-        epoch_loss = 0.0
-        start_epoch = time.time()
-        n_train = len(self.train_dataloader) * self.train_dataloader.batch_size
+        epoch_start_time = time.time()
+        print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
+        # reset the generators
+        # train = get_imgs_and_masks(iddataset['train'], dir_img, dir_mask, img_scale, dataset)
+        # val = get_imgs_and_masks(iddataset['val'], dir_img, dir_mask, img_scale, dataset)
 
         print('Starting epoch {}/{}.'.format(epoch + 1, self.total_epochs))
         batch_idx = 0
@@ -108,7 +140,11 @@ class Trainer:
             )
             torch.save(self.net.state_dict(), checkpoint_path)
 
-    def log_metrics(self):
+        current_epoch = initial_epoch + epoch + 1
+        Train_loss.append(epoch_loss / i)
+        Valida_dice.append(val_dice)
+        EPOCH.append(current_epoch)
+            
         fig = plt.figure()
         plt.title('Training Process')
         plt.xlabel('epoch')
@@ -117,68 +153,17 @@ class Trainer:
         l2, = plt.plot(self.epochs_run, self.val_dices, c='blue')
 
         plt.legend(handles=[l1, l2], labels=['Tra_loss', 'Val_dice'], loc='best')
-        plt.savefig(self.dir_logs + 'Training Process for lr-{}.png'.format(self.lr), dpi=600)
+        plot_path = build_plot_path(dataset, model, lr)
+        plt.savefig(plot_path, dpi=600)
         plt.close()
 
-    def run(self, epochs):
-        self.total_epochs = epochs
-        for epoch in range(epochs):
-            train_loss = self.train_one_epoch(epoch)
-            val_dice = self.validate()
-
-            self.train_losses.append(train_loss)
-            self.val_dices.append(val_dice)
-            self.epochs_run.append(epoch)
-
-            self.log_metrics()
-            self.save_checkpoint(epoch, val_dice, train_loss)
-            print()
-
-        total_time = int(sum(self.spend_total_time))
-        print('Total time : {}m {}s'.format(total_time // 60, total_time % 60))
-
-
-def train_net(net,
-              epochs=5,
-              batch_size=1,
-              img_size=512,
-              lr=1e-2,
-              checkpoint=True,
-              gpu=True,
-              dataset=None,
-              dir_logs=None,
-              dir_image=r'E:\\splicing_1_img\\img_jpg',
-              dir_mask=r"E:\\splicing_1_annotations\\probe_mask"
-              ):
-    train_dataloader, val_dataloader = load_dataset(
-        10764,
-        img_size,
-        batch_size,
-        dir_img=dir_image,
-        dir_mask=dir_mask
-    )
-
-    device = torch.device('cuda' if gpu and torch.cuda.is_available() else 'cpu')
-    net.to(device)
-
-    optimizer = optim.Adam(net.parameters(), lr=lr)
-    criterion = nn.BCELoss()
-
-    trainer = Trainer(
-        net=net,
-        train_dataloader=train_dataloader,
-        val_dataloader=val_dataloader,
-        optimizer=optimizer,
-        criterion=criterion,
-        device=device,
-        dir_logs=dir_logs,
-        dataset=dataset,
-        lr=lr,
-        image_size=img_size,
-        checkpoint=checkpoint
-    )
-
-    trainer.run(epochs)
+        if epoch < 140:
+            checkpoint_path = build_checkpoint_path(dataset, model, current_epoch, val_dice, epoch_loss / i)
+            torch.save(net.state_dict(), checkpoint_path)
+        spend_per_time = time.time() - epoch_start_time
+        print('Spend time: {:.3f}s'.format(spend_per_time))
+        spend_total_time.append(spend_per_time)
+        print()
 
 
 def main():
@@ -191,36 +176,35 @@ def main():
     checkpoint = True
     dataset = "defactor" #'CASIA'
     model = 'Ringed_Res_Unet'
-    dir_logs = './result/logs/{}/{}/'.format(dataset, model)
-    dir_image=r'E:\\splicing_2_img\\img_jpg'
-    dir_mask =  r"E:\\splicing_2_annotations\\probe_mask"
-
-    # log directory 생성
-    os.makedirs(dir_logs,exist_ok=True)
+    dir_image=r'E:\splicing_2_img\img_jpg'
+    dir_mask =  r"E:\splicing_2_annotations\probe_mask"
+    log_dir = ensure_log_dir(dataset, model)
+    initial_epoch = 0
 
     net = Ringed_Res_Unet(n_channels=3, n_classes=1)
-    if config.checkpoint and config.checkpoint_path:
-        net.load_state_dict(torch.load(config.checkpoint_path))
+    # 훈련 epoch 나눠서 진행 할 때 True 사용
+    if checkpoint: # epoch 3-img_1 3-img_2 *4
+        initial_epoch = 15
+        checkpoint_path = log_dir / "defactor-[val_dice]-0.7546-[train_loss]-0.3125-ep15.pkl"
+        net.load_state_dict(torch.load(checkpoint_path))
         print('Load checkpoint')
 
     if config.gpu:
         net.cuda()
+        # cudnn.benchmark = True  # faster convolutions, but more memory
 
-    train_net(net=net, config=config)
-
-
-def parse_args():
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Train Ringed Res-UNet with configuration file")
-    parser.add_argument('--config', required=True, help='Path to JSON or YAML configuration file')
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-    config = TrainingConfig.from_file(args.config)
-    train_from_config(config)
+    train_net(net=net,
+              epochs=epochs,
+              batch_size=batchsize,
+              img_size=image_size,
+              lr=lr,
+              gpu=gpu,
+              dataset=dataset,
+              model=model,
+              checkpoint=checkpoint,
+              dir_image=dir_image,
+              dir_mask=dir_mask,
+              initial_epoch=initial_epoch)
 
 if __name__ == '__main__':
     main()

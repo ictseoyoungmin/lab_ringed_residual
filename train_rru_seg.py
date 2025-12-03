@@ -5,7 +5,7 @@ python train.py로 네트워크 훈련한 다음 RRU_train_test.ipynb 파일에�
 가까운 시일 내 predict.py로 성능평가 해야 함 
 """
 import matplotlib.pyplot as plt
-import time,os
+import time
 import torch.backends.cudnn as cudnn
 import torch
 from torch import nn
@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader,random_split
 from model.unet_model import Ringed_Res_Unet,DCT_RRUnet
 from dataset.Defacto import DefactoDataset
 from loss.dice_loss import dice_coeff
+from utils.io import build_checkpoint_path, build_plot_path, ensure_log_dir
 
 def load_dataset(total_nums,img_size,batch_size,dir_img,dir_mask):
     # ImageNet 표준으로 정규화 <- 일반적인 관행
@@ -46,11 +47,15 @@ def train_net(net,
               checkpoint=True,
               gpu=True,
               dataset=None,
-              dir_logs=None,
+              model=None,
               dir_image=r'E:\splicing_2_img\img_jpg',
               dir_mask = r"E:\splicing_2_annotations\probe_mask",
-              chk_ep=-1
+              initial_epoch=0
               ):
+    if dataset is None or model is None:
+        raise ValueError('dataset and model must be provided for logging.')
+
+    ensure_log_dir(dataset, model)
 
     # splicing_1_img 개수는 10765
     train_dataloader, val_dataloader = load_dataset(10764,
@@ -83,7 +88,7 @@ def train_net(net,
 
     for epoch in range(epochs):
         net.train()
-        start_epoch = time.time()
+        epoch_start_time = time.time()
         print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
         epoch_loss = 0
         
@@ -133,13 +138,14 @@ def train_net(net,
             val_dice = tot / i
 
         print('Validation Dice: {:.4f}'.format(val_dice))
-        spend_per_time = time.time() - start_epoch
+        spend_per_time = time.time() - epoch_start_time
         print('Spend time: {:.3f}s'.format(spend_per_time))
         spend_total_time.append(spend_per_time)
         print()
+        current_epoch = initial_epoch + epoch + 1
         Train_loss.append(epoch_loss / i)
         Valida_dice.append(val_dice)
-        EPOCH.append(epoch)
+        EPOCH.append(current_epoch)
             
         fig = plt.figure()
         plt.title('Training Process')
@@ -149,12 +155,13 @@ def train_net(net,
         l2, = plt.plot(EPOCH, Valida_dice, c='blue')
 
         plt.legend(handles=[l1, l2], labels=['Tra_loss', 'Val_Dice'], loc='best')
-        plt.savefig(dir_logs + 'Training Process for dct-{}.png'.format(lr), dpi=600)
+        plot_path = build_plot_path(dataset, model, lr, suffix='Training Process')
+        plt.savefig(plot_path, dpi=600)
         plt.close()
 
         if epoch < 140:
-            torch.save(net.state_dict(),
-                   dir_logs + 'RRU-[val_dice]-{:.4f}-[train_loss]-{:.4f}-ep{}.pkl'.format(val_dice, epoch_loss / i,chk_ep+epoch+1))
+            checkpoint_path = build_checkpoint_path(dataset, model, current_epoch, val_dice, epoch_loss / i)
+            torch.save(net.state_dict(), checkpoint_path)
         
 
     Tt = int(sum(spend_total_time))    
@@ -171,22 +178,23 @@ def main():
     lr = 1e-3
     dataset = "defactor" #'CASIA'
     model = 'RRUNet'
-    dir_logs = './result/logs/{}/{}/'.format(dataset, model)
     dir_image=r'F:\datasets\Defacto_splicing\splicing_2_img\img_jpg'
     dir_mask =  r"F:\datasets\Defacto_splicing\splicing_2_annotations\probe_mask"
+    log_dir = ensure_log_dir(dataset, model)
     checkpoint = True
-    transfer_learing = False # RRU의 다운 샘플 블록 전이학습 한번 진행 
+    transfer_learing = False # RRU의 다운 샘플 블록 전이학습 한번 진행
     chk_model = "RRU-[val_dice]-0.6735-[train_loss]-0.3139-ep18.pkl"
     chk_ep = 18#int(tl_model[-5]) if checkpoint else 0
+    initial_epoch = 0
     print("chk-ep: ",chk_ep)
-    # log directory 생성
-    os.makedirs(dir_logs,exist_ok=True)
 
     net = Ringed_Res_Unet(n_channels=3, n_classes=1) # 1ep 7633.230s
     # 훈련 epoch 나눠서 진행 할 때 True 사용
 
     if checkpoint: # epoch 3-img_1 3-img_2 *4
-        net.load_state_dict(torch.load(os.path.join('./result/logs/',dataset, model,chk_model)))
+        checkpoint_path = log_dir / chk_model
+        net.load_state_dict(torch.load(checkpoint_path))
+        initial_epoch = chk_ep
         print('Load checkpoint')
 
     if gpu:
@@ -200,11 +208,11 @@ def main():
               lr=lr,
               gpu=gpu,
               dataset=dataset,
-              dir_logs=dir_logs,
+              model=model,
               checkpoint=checkpoint,
               dir_image=dir_image,
               dir_mask=dir_mask,
-              chk_ep=chk_ep)
+              initial_epoch=initial_epoch)
 
 if __name__ == '__main__':
     main()
